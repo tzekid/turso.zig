@@ -1,0 +1,95 @@
+name: Extended validation
+
+on:
+  schedule:
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: Lifecycle iterations per lane
+        required: false
+        default: "100000"
+      workers:
+        description: Independent connection workers
+        required: false
+        default: "16"
+      seed:
+        description: Reproducible unsigned stress seed
+        required: false
+        default: "195936478"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZIG_VERSION: 0.16.0
+  RUST_TOOLCHAIN: "1.88"
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux-soak:
+    name: Linux lifecycle and fan-out soak
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Run reproducible ReleaseSafe soak
+        env:
+          ITERATIONS: ${{ inputs.iterations || '100000' }}
+          WORKERS: ${{ inputs.workers || '16' }}
+          SEED: ${{ inputs.seed || '195936478' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/extended-evidence"
+          {
+            echo "commit=$GITHUB_SHA"
+            echo "runner=$RUNNER_NAME"
+            echo "zig=$(zig version)"
+            echo "rust=$(rustc -V)"
+            echo "iterations=$ITERATIONS"
+            echo "workers=$WORKERS"
+            echo "seed=$SEED"
+          } | tee "$RUNNER_TEMP/extended-evidence/environment.txt"
+          /usr/bin/time -v zig build soak \
+            -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2 -- \
+            "$ITERATIONS" "$WORKERS" "$SEED" \
+            2>&1 | tee "$RUNNER_TEMP/extended-evidence/soak.log"
+          grep -E 'resources fd_before=[0-9]+ fd_after=[0-9]+ threads_before=[0-9]+ threads_after=[0-9]+' \
+            "$RUNNER_TEMP/extended-evidence/soak.log"
+          max_rss=$(sed -n 's/^[[:space:]]*Maximum resident set size (kbytes):[[:space:]]*//p' \
+            "$RUNNER_TEMP/extended-evidence/soak.log" | tail -1)
+          test -n "$max_rss"
+          test "$max_rss" -le 2097152
+          printf 'max_rss_kib=%s\nmax_rss_limit_kib=2097152\n' "$max_rss" \
+            > "$RUNNER_TEMP/extended-evidence/resource-bounds.txt"
+
+      - name: Upload extended evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-extended-soak-${{ github.run_id }}
+          path: ${{ runner.temp }}/extended-evidence/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,84 @@
+name: Advisory upstream drift
+
+on:
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.16.0
+  RUST_TOOLCHAIN: "1.88"
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  turso-main:
+    name: Turso main ABI and smoke advisory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out production pin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Compare and smoke current Turso main
+        run: tools/check-upstream-drift.sh "$RUNNER_TEMP/drift-evidence"
+
+      - name: Publish advisory summary
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/drift-evidence/summary.txt"; then
+            cat "$RUNNER_TEMP/drift-evidence/summary.txt" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Drift probe failed before producing a summary." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload drift evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: turso-main-drift-${{ github.run_id }}
+          path: ${{ runner.temp }}/drift-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+  zig-master:
+    name: Zig master compile advisory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Check out production pin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig master
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: master
+          use-cache: false
+
+      - name: Compile native-independent API surface
+        run: |
+          zig version
+          zig fmt --check build.zig src tests examples bench tools/soak.zig
+          zig build test-pure -Doptimize=Debug --summary all
