@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a safe API, integration, or quality improvement
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user need or limitation should be addressed?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behavior
+      description: Show the caller experience and ownership/lifetime expectations when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: upstream
+    attributes:
+      label: Upstream C ABI support
+      description: Link the relevant turso.h or turso_sync.h declaration, or explain the upstream gap.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include compatibility and migration tradeoffs.

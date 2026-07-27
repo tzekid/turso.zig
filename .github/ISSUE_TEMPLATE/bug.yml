@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a reproducible defect in the Zig bindings
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Report security vulnerabilities privately through SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest Zig source and build command that reproduce the problem.
+      render: zig
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: turso.zig version or commit
+      placeholder: v0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: zig
+    attributes:
+      label: Zig version
+      placeholder: 0.16.0
+    validations:
+      required: true
+  - type: dropdown
+    id: native
+    attributes:
+      label: Native library mode
+      options:
+        - source
+        - system
+    validations:
+      required: true
+  - type: dropdown
+    id: linkage
+    attributes:
+      label: Linkage
+      options:
+        - static
+        - dynamic
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and architecture
+      placeholder: Ubuntu 24.04 x86_64
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste sanitized output. Remove tokens, keys, private paths, SQL data, and database contents.
+      render: text
