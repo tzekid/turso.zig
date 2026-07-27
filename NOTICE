@@ -1,0 +1,31 @@
+turso.zig
+=========
+
+This project is licensed under the MIT License. See LICENSE.
+
+Turso SDK Kit headers
+---------------------
+
+include/turso.h is copied from:
+
+  Project: Turso Database
+  Source: https://github.com/tursodatabase/turso
+  Tag: v0.7.0
+  Commit: e7cb62a8bd2f3655a661a621ee389365c1a1e43e
+  Annotated tag object: c401a2e44e1a3b0435b4e8d5501e945283d2ba10
+  Path: sdk-kit/turso.h
+  Upstream body SHA-256: 14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb
+  License: MIT
+  Copyright: 2023-2026 the Turso authors
+
+include/turso_sync.h is copied from the same tag, commit, and tag object:
+
+  Path: sync/sdk-kit/turso_sync.h
+  Upstream body SHA-256: 38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35
+  License: MIT
+  Copyright: 2023-2026 the Turso authors
+
+Source-mode builds download and compile the pinned Turso release. Turso's
+LICENSE.md and NOTICE.md apply to that source and the resulting native library.
+Release archives that redistribute a native Turso library must include those
+upstream files.
