@@ -8,6 +8,7 @@ const ffi = @import("ffi.zig");
 const statement_mod = @import("statement.zig");
 const functions_mod = @import("functions.zig");
 const batch_mod = @import("batch.zig");
+const invariant = @import("invariant.zig");
 
 pub const Diagnostics = diagnostics_mod.Diagnostics;
 pub const Value = value_mod.Value;
@@ -401,7 +402,7 @@ pub const Connection = struct {
         control.handle = null;
         control.closed = true;
         const previous = control.owner_connections.fetchSub(1, .release);
-        std.debug.assert(previous != 0);
+        invariant.requireConnectionOwner(previous);
         const allocator = control.allocator;
         allocator.destroy(control);
         self.control = null;

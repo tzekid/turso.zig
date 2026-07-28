@@ -41,6 +41,8 @@ is pre-1.0.
 - Defined platform support by target-native package execution, documented the
   work needed to promote Android/iOS, and kept browser/WASM explicitly outside
   the native SDK Kit C ABI claim.
+- Kept owner-count and active-handle bookkeeping checks fatal in every
+  optimization mode, with dedicated Debug and ReleaseFast panic probes.
 
 ### Known limitations
 

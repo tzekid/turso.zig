@@ -47,7 +47,9 @@ jobs:
           shellcheck tools/*.sh tests/release-package*.sh
 
       - name: Run native-independent tests
-        run: zig build test-pure -Doptimize=Debug
+        run: |
+          zig build test-pure -Doptimize=Debug
+          zig build test-ownership-invariants -Doptimize=ReleaseFast
 
       - name: Build public API documentation
         run: zig build docs

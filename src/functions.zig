@@ -17,6 +17,7 @@ const diagnostics_mod = @import("diagnostics.zig");
 const value_mod = @import("value.zig");
 const cstring = @import("cstring.zig");
 const ffi = @import("ffi.zig");
+const invariant = @import("invariant.zig");
 
 pub const Diagnostics = diagnostics_mod.Diagnostics;
 pub const Value = value_mod.Value;
@@ -73,7 +74,7 @@ pub const AggregateTracker = struct {
         if (state.previous) |previous| {
             previous.next = state.next;
         } else {
-            std.debug.assert(self.head == state);
+            invariant.requireAggregateHead(self.head == state);
             self.head = state.next;
         }
         if (state.next) |next| next.previous = state.previous;

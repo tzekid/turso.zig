@@ -4,6 +4,7 @@ const raw = @import("raw.zig").c;
 const status_mod = @import("../status.zig");
 const diagnostics_mod = @import("../diagnostics.zig");
 const ffi = @import("../ffi.zig");
+const invariant = @import("../invariant.zig");
 const state_mod = @import("state.zig");
 
 pub const Diagnostics = diagnostics_mod.Diagnostics;
@@ -214,8 +215,8 @@ pub const IoItem = struct {
             return error.InvalidState;
         }
         const state = self.state orelse return error.InvalidState;
+        invariant.requireOutstandingSyncItem(state.outstanding_items);
         raw.turso_sync_database_io_item_deinit(handle);
-        std.debug.assert(state.outstanding_items != 0);
         state.outstanding_items -= 1;
         self.handle = null;
         self.state = null;

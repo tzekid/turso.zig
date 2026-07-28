@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const package_version = @import("src/version.zig");
+const invariant = @import("src/invariant.zig");
 
 const NativeMode = enum { source, system };
 
@@ -349,6 +350,58 @@ pub fn build(b: *std.Build) void {
     });
 
     const pure_test_step = b.step("test-pure", "Run tests that do not require the native Turso library");
+    const invariant_module = b.createModule(.{
+        .root_source_file = b.path("src/invariant.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const invariant_probe = b.addExecutable(.{
+        .name = "turso-ownership-invariant-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/ownership_invariant_probe.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "invariant", .module = invariant_module }},
+        }),
+    });
+    const invariant_step = b.step(
+        "test-ownership-invariants",
+        "Verify ownership bookkeeping panics in every optimization mode",
+    );
+    const invariant_cases = [_]struct {
+        name: []const u8,
+        message: []const u8,
+    }{
+        .{
+            .name = "statement-registry-underflow",
+            .message = invariant.messages.statement_registry_underflow,
+        },
+        .{
+            .name = "active-statement-mismatch",
+            .message = invariant.messages.active_statement_mismatch,
+        },
+        .{
+            .name = "connection-owner-underflow",
+            .message = invariant.messages.connection_owner_underflow,
+        },
+        .{
+            .name = "sync-io-underflow",
+            .message = invariant.messages.sync_io_underflow,
+        },
+        .{
+            .name = "aggregate-head-mismatch",
+            .message = invariant.messages.aggregate_head_mismatch,
+        },
+    };
+    for (invariant_cases) |case| {
+        const run_invariant_probe = b.addRunArtifact(invariant_probe);
+        run_invariant_probe.addArg(case.name);
+        run_invariant_probe.expectExitCode(86);
+        run_invariant_probe.expectStdErrMatch(case.message);
+        invariant_step.dependOn(&run_invariant_probe.step);
+    }
+    pure_test_step.dependOn(invariant_step);
+
     const status_tests = addTestRun(b, "turso-status-tests", b.path("tests/status.zig"), target, optimize, &.{
         .{ .name = "status", .module = status_module },
     });

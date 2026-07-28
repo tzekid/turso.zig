@@ -10,6 +10,7 @@ and clean downstream consumption.
 | --- | --- | --- |
 | Formatting | `zig fmt --check .` | Zig source is canonical |
 | Pure Zig | `zig build test-pure` | Status, diagnostics, values, config, C-string, and statement-I/O logic |
+| Ownership invariants | `zig build test-ownership-invariants -Doptimize=ReleaseFast` | Owner counts and active-handle identity still panic when safety assertions are disabled |
 | Raw ABI | `zig build test-abi` | Header layout/signatures, status values, runtime version, native `SELECT 1`, error ownership |
 | Safe API | `zig build test-safe` | Database, statements, rows, decode, transactions, callbacks, failures, SQL corpus |
 | Structured batches | `zig build test-batches` | Parameters, partial reports, bounded ownership, transaction modes, allocator and rollback failure |
@@ -98,9 +99,11 @@ idempotent cleanup on one owner variable, parent/child teardown, stale row
 borrows, reusable prepared-query leases, multiple idle statements with one
 active execution, reset failure, structured-batch partial progress and bounded
 materialization, transaction and rollback-failure poisoning, callback context
-and aggregate-state destruction, and sync transfer/consume rules. Pure config
-tests pin every v0.7.1 feature token and its order, reject duplicate/known or
-malformed unchecked names, and exercise feature-render allocation failure.
+and aggregate-state destruction, and sync transfer/consume rules. Subprocess
+probes verify that owner-count and active-handle invariant violations remain
+fatal in Debug and ReleaseFast. Pure config tests pin every v0.7.1 feature token
+and its order, reject duplicate/known or malformed unchecked names, and
+exercise feature-render allocation failure.
 
 The safe wrapper never races a handle in ways forbidden by the C header. One
 `Database` may fan out independent connections. A Connection may retain

@@ -3,6 +3,7 @@ const raw = @import("raw.zig").c;
 const status_mod = @import("status.zig");
 const value_mod = @import("value.zig");
 const decode_mod = @import("decode.zig");
+const invariant = @import("invariant.zig");
 
 pub const ValueRef = value_mod.ValueRef;
 pub const OwnedValue = value_mod.OwnedValue;
@@ -75,7 +76,7 @@ pub const OperationControl = struct {
     }
 
     pub fn unregister(self: *OperationControl) void {
-        std.debug.assert(self.live_statements != 0);
+        invariant.requireRegisteredStatement(self.live_statements);
         self.live_statements -= 1;
     }
 
@@ -86,7 +87,7 @@ pub const OperationControl = struct {
     }
 
     pub fn release(self: *OperationControl, statement: *anyopaque) void {
-        std.debug.assert(self.active_statement == statement);
+        invariant.requireActiveStatement(self.active_statement, statement);
         self.active_statement = null;
     }
 

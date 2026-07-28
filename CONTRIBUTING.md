@@ -56,6 +56,13 @@ lifecycle code. Preserve these boundaries:
 - treat row text and blobs as borrowed until the next statement operation; and
 - keep extension loading off and secret values out of diagnostics by default.
 
+Ownership-bookkeeping changes must also pass the all-mode panic probes:
+
+```sh
+zig build test-ownership-invariants
+zig build test-ownership-invariants -Doptimize=ReleaseFast
+```
+
 An upstream SDK update must follow
 [docs/UPDATING_TURSO.md](docs/UPDATING_TURSO.md) and include reviewed header,
 symbol-manifest, runtime-version, ownership, and provenance changes together.
