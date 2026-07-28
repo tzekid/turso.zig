@@ -193,6 +193,9 @@ to normalized root-relative paths.
   the pinned C ABI does not provide them.
 - Selectable remote encryption ciphers and transform callbacks are omitted from
   the safe sync API until upstream's C conversion paths implement them.
+- File-backed partial bootstrap is restricted to Linux because the pinned sync
+  SDK Kit requires sparse-file support there. In-memory partial bootstrap
+  remains available on every supported desktop target.
 - Cloud sync is opt-in and should be treated as an evolving pre-1.0 interface.
 
 Raw access remains available for advanced callers, but the safe API does not

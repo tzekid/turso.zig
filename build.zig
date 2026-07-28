@@ -353,6 +353,16 @@ pub fn build(b: *std.Build) void {
     const config_tests = addTestRun(b, "turso-config-tests", b.path("src/config.zig"), target, optimize, &.{});
     pure_test_step.dependOn(&config_tests.step);
 
+    const partial_policy_tests = addTestRun(
+        b,
+        "turso-sync-partial-policy-tests",
+        b.path("src/sync/partial_policy.zig"),
+        target,
+        optimize,
+        &.{},
+    );
+    pure_test_step.dependOn(&partial_policy_tests.step);
+
     const cstring_tests = addTestRun(b, "turso-cstring-tests", b.path("src/cstring.zig"), target, optimize, &.{});
     pure_test_step.dependOn(&cstring_tests.step);
 

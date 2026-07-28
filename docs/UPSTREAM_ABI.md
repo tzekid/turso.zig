@@ -354,6 +354,16 @@ sizes (`sync/sdk-kit/src/rsapi.rs:50-126`). Prefix and query partial-bootstrap
 strategies are a tagged union and therefore mutually exclusive. Partial sync
 and logical MVCC pull remain explicit opt-ins.
 
+Partial bootstrap selects sparse persistent I/O only on Linux. In the pinned
+SDK Kit, non-Linux targets fall back to `PlatformIO`, whose files do not provide
+the hole-detection contract required by lazy partial storage. This can reach a
+panic during page access ([tursodatabase/turso#7841](https://github.com/tursodatabase/turso/issues/7841));
+the proposed upstream work remains unreleased
+([tursodatabase/turso#7843](https://github.com/tursodatabase/turso/pull/7843)).
+The safe Zig configuration therefore rejects non-Linux file-backed partial
+bootstrap before allocation or native construction. The exact `:memory:` path
+uses `MemoryIO` and remains permitted.
+
 ## Known discrepancies and upstream gaps
 
 Priority is impact on a production Zig interface.
@@ -363,6 +373,7 @@ Priority is impact on a production Zig interface.
 | P0 | `remote_encryption_cipher` is in `turso_sync.h:127-130` but `TursoDatabaseSyncConfig::from_capi` never reads it and engine options carry only the key (`sync/sdk-kit/src/rsapi.rs:50-126`, `243-260`). | The safe Zig config omits selectable remote cipher and tests that the field remains null. Seek upstream fix/clarification before advertising it. |
 | P0 | Caller-driven base database open can return `IO`, but no database IO driver exists in `turso.h`. | Force blocking base open (`async_io = 0`) in the safe API. Keep async milestone upstream-blocked. |
 | P0 | Sync transform/mutation callback paths contain `todo!()` and `use_transform` is hard-coded false (`sync_engine_io.rs:143-174`, `310-316`; `rsapi.rs:243-260`). | The safe Zig module exposes no transform callbacks; enabling this internally would panic across FFI. |
+| P0 | File-backed partial bootstrap uses sparse I/O only on Linux; the non-Linux fallback lacks the required hole-detection behavior ([#7841](https://github.com/tursodatabase/turso/issues/7841)). | Reject non-Linux file-backed partial bootstrap before calling C. Keep `:memory:` available and revisit only after a released upstream fix. |
 | P0 | The SDK Kit README C example uses removed/nonexistent types and functions such as `turso_status_t`, `turso_database_create`, result structs, `turso_statement_bind_named`, and `turso_statement_row_value` (`sdk-kit/README.md:72-192`). | Never copy the README C example. Compile examples against the pinned headers. |
 | P1 | The header says Connection and Statement are exclusive and forbids close/deinit while calls are active; internal guards cover only some overlap. | Encode exclusivity in safe Zig types and test deterministic sequential rejection. Never race raw same-handle calls or teardown outside the C contract. |
 | P1 | Sync database concurrency is under-documented; implementation and Go wrapper serialize operations. | The safe Zig wrapper permits one active operation per sync database until upstream publishes a stronger contract. |

@@ -1,9 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const raw = @import("raw.zig").c;
 const base_config = @import("../config.zig");
 const cstring = @import("../cstring.zig");
 const ffi = @import("../ffi.zig");
 const diagnostics_mod = @import("../diagnostics.zig");
+const partial_policy = @import("partial_policy.zig");
 
 pub const Diagnostics = diagnostics_mod.Diagnostics;
 
@@ -81,6 +83,17 @@ pub const NativeConfig = struct {
                 ffi.setWrapperError(diagnostics, "partial bootstrap query must not be empty");
                 return error.InvalidState;
             },
+        };
+        partial_policy.validate(
+            local.path,
+            sync_config.partial_bootstrap != null,
+            builtin.os.tag,
+        ) catch |err| {
+            ffi.setWrapperError(
+                diagnostics,
+                "file-backed partial bootstrap requires Linux in the pinned Turso SDK Kit",
+            );
+            return err;
         };
         if (local.vfs) |vfs_value| {
             vfs_value.validateForTarget() catch |err| {

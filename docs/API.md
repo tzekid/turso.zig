@@ -130,6 +130,13 @@ Windows drive prefixes. This is lexical confinement, not portable symlink
 confinement. The caller must trust the borrowed root and prevent untrusted
 changes to symlinks anywhere in its tree.
 
+Partial bootstrap is accepted for file-backed databases only on Linux. The
+pinned sync SDK Kit uses Linux sparse-file I/O for that mode; its non-Linux
+fallback does not implement the required hole detection. `:memory:` uses the
+native memory I/O path and remains valid with partial bootstrap on every
+supported desktop target. Unsupported file-backed configurations fail with
+`error.UnsupportedPartialBootstrap` before allocation or native construction.
+
 Most transport failures are poisoned into the native operation, resumed to a
 terminal error, and cleaned before `sync.run` returns. If poisoning or checked
 I/O-item cleanup itself cannot converge, `sync.run` returns while the caller's

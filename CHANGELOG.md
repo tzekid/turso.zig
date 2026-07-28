@@ -12,6 +12,8 @@ is pre-1.0.
   instead of a process-global registry and spinlock.
 - Restricted standard-transport HTTP field names to RFC token characters and
   clarified that plaintext HTTP requires explicit `allow_http` opt-in.
+- Rejected file-backed partial bootstrap outside Linux before native
+  construction, while retaining portable in-memory partial bootstrap.
 
 ## [0.1.0] - 2026-07-27
 

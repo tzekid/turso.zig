@@ -106,6 +106,11 @@ blocking.
 Deterministic C fixtures cover operation polling, result extraction, changes
 consumption, I/O item completion/poisoning, authorization redaction, HTTP
 status bounds, atomic full writes, missing reads, and lexical path rejection.
+Native-independent sync configuration tests exercise the partial-bootstrap
+platform policy for Linux, macOS, Windows, and FreeBSD: file-backed partial
+bootstrap is Linux-only while `:memory:` remains portable. This proves wrapper
+rejection deterministically without treating a cross-compiled binary as
+target-native runtime evidence.
 
 The loopback E2E gate starts the pinned `tursodb --sync-server`, creates two
 independent local clients, pushes from each side, bootstraps the second client,
