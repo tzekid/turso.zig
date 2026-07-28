@@ -47,6 +47,21 @@ but the hosted execution lane is disabled pending
 [issue #4](https://github.com/tzekid/turso.zig/issues/4). Compile-only support
 is not target-native evidence, so Windows ARM64 is not a current release claim.
 
+Targets outside the blocking matrix are explicit non-claims:
+
+| Target | Current status | Evidence required before promotion |
+| --- | --- | --- |
+| Windows ARM64 | unclaimed | Resolve issue #4, then execute the base/sync static/dynamic package consumers target-natively |
+| Android | unclaimed | Package the SDK Kit for a declared API level and run persistence/sync on device or emulator |
+| iOS | unclaimed | Package a device/simulator framework with a deployment/signing contract and execute both environments |
+| browser/WASM | unsupported | Supply the missing WASM driver, worker/OPFS host integration, and real-browser tests |
+
+The safe and raw Zig modules compile as documentation objects for
+`aarch64-linux-android` and `aarch64-ios` in system mode. That compile-only
+check protects API portability; it does not promote either platform. See
+[Platform boundaries](PLATFORMS.md) for the architectural and packaging
+requirements.
+
 Linux additionally runs:
 
 - deterministic source/static/dynamic package assembly and extraction;
@@ -151,6 +166,6 @@ documented feature limits remain the public claims.
 
 Unsupported claims include source-mode cross compilation without an explicitly
 configured Cargo linker/sysroot, platforms absent from the target matrix,
-Windows ARM64 while issue #4 is open, caller-driven local async opening, query
-interruption, sync cancellation, remote cipher selection, and transform
-callbacks.
+Windows ARM64 while issue #4 is open, Android/iOS application support,
+browser/WASM, caller-driven local async opening, query interruption, sync
+cancellation, remote cipher selection, and transform callbacks.

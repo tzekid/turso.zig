@@ -176,6 +176,13 @@ targets are:
 | macOS | `x86_64-apple-darwin`, `aarch64-apple-darwin` |
 | Windows | `x86_64-pc-windows-msvc` |
 
+Support means the packaged library and a clean consumer have executed
+target-natively; accepting a target triple or compiling declarations is not
+enough. Android and iOS remain unclaimed, and browser/WASM is unsupported.
+[Platform boundaries](docs/PLATFORMS.md) records the evidence, the distinction
+between source and system mode, and the exact work required to add a platform
+without overclaiming it.
+
 ## Ownership
 
 `Database`, `Connection`, `Statement`, `Rows`, `Transaction`, sync operations,
@@ -304,6 +311,7 @@ consumers, deterministic release archives, and local sync E2E. Run
 
 Compatibility and release details live in:
 
+- [docs/PLATFORMS.md](docs/PLATFORMS.md)
 - [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md)
 - [docs/UPSTREAM_ABI.md](docs/UPSTREAM_ABI.md)
 - [docs/UPDATING_TURSO.md](docs/UPDATING_TURSO.md)

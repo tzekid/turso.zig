@@ -21,6 +21,33 @@ must therefore be thread-safe for the full owner lifetime whenever the Database
 or any derived Connections may be used concurrently, including operations,
 registration replacement/unregister, and deinitialization.
 
+## Ecosystem concept mapping
+
+Zig has no standard database interface equivalent to Python DB-API,
+Go `database/sql`, JDBC, or ADO.NET. This package therefore exposes the native
+Turso lifecycle directly instead of inventing a repository-local compatibility
+layer that other Zig libraries would not implement.
+
+| Common ecosystem concept | turso.zig owner or operation |
+| --- | --- |
+| data source / database handle | `Database` |
+| session / connection | `Connection` |
+| prepared command | reusable `Statement` |
+| result cursor / data reader | `Rows`, yielding a borrowed `Row` |
+| transaction | `Transaction` |
+| positional or named parameters | `Value`, tuples/structs, or explicit named bindings |
+| SQL script batch | `execBatch` |
+| structured parameterized batch | `executeBatch` and caller-owned `BatchReport` |
+| user-defined function / collation | managed callback registrations on `Connection` |
+| async task or cancellation token | not exposed by the pinned database C ABI |
+
+The design principles are explicit allocators, visible ownership and borrowing,
+ordinary Zig errors, no hidden connection pool, and no automatic retry.
+Applications may build a domain-specific pool or interface above these owners,
+but such a layer should not weaken their lifetime or one-active-execution
+rules. See [Platform boundaries](PLATFORMS.md) for the separate distinction
+between API portability and target support.
+
 ## Borrowed rows and values
 
 `Rows.next()` returns a borrowed `Row`. Its text/blob slices and native access are valid only until the next row operation, reset, finalization, cancellation, or deinit. A generation check returns `error.InvalidState` when an older Row is used after advancing while its Connection control still exists.

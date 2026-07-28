@@ -38,6 +38,9 @@ is pre-1.0.
 - Renamed `FeatureSet.extra` to `unchecked_extra`; unchecked names must now be
   unique valid UTF-8 tokens and cannot duplicate any typed feature. Upstream
   may still ignore syntactically accepted unknown names.
+- Defined platform support by target-native package execution, documented the
+  work needed to promote Android/iOS, and kept browser/WASM explicitly outside
+  the native SDK Kit C ABI claim.
 
 ## [0.1.0] - 2026-07-27
 
