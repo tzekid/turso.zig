@@ -177,8 +177,9 @@ Encryption requires both cipher and hex key, and also the `encryption`
 experimental feature (`sdk-kit/src/rsapi.rs:314-355`, `756-759`). VFS restrictions
 are runtime checked: `io_uring` is Linux-only and `experimental_win_iocp` is
 Windows-only (`sdk-kit/src/rsapi.rs:670-724`). Unknown experimental feature names
-are silently ignored (`sdk-kit/src/rsapi.rs:184-213`), so validate the wrapper's
-closed feature set before calling C.
+are silently ignored (`sdk-kit/src/rsapi.rs:184-213`). The wrapper therefore
+exposes every pinned parser token as a typed field and confines unknown names
+to the validated, explicitly unsupported `unchecked_extra` escape hatch.
 
 ### Connection close
 
@@ -384,5 +385,5 @@ Priority is impact on a production Zig interface.
 | P1 | Rust API exposes connection interrupt/query-timeout methods, but `turso.h` does not (`sdk-kit/src/rsapi.rs:931-950`). | Omit from safe Zig API or propose upstream C additions; do not bind Rust symbols. |
 | P1 | No explicit C ABI revision exists; only crate version is exported. | Require exact `turso_version()` match by default and compare header/symbol manifests on upgrade. |
 | P2 | `turso_setup` is process-global/one-shot but its header only says “Setup global database info.” | Make setup idempotent in Zig and document that later filter changes do not take effect. |
-| P2 | Unknown experimental feature strings are silently ignored. | Expose typed supported flags and reject unknown values in safe configuration. |
+| P2 | Unknown experimental feature strings are silently ignored. | Expose every pinned token as a typed flag; keep unknown values only behind validated `unchecked_extra` and make the absence of an upstream effect explicit. |
 | P2 | Sync has no auth-token configuration field; transport owns authorization. | Authorization is an explicit caller-owned transport option; the standard driver and tests keep it out of diagnostics. |

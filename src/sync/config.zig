@@ -128,9 +128,15 @@ pub const NativeConfig = struct {
         errdefer if (result.remote_url) |value| allocator.free(value);
 
         var features = local.features;
-        if (local.encryption != null) features.encryption = true;
+        base_config.requireEncryptionFeature(&features, local.encryption != null);
         const rendered_features = features.render(allocator) catch |err| {
-            ffi.setWrapperError(diagnostics, "local feature configuration is invalid or could not be rendered");
+            ffi.setWrapperError(
+                diagnostics,
+                if (err == error.OutOfMemory)
+                    "local feature configuration could not be allocated"
+                else
+                    "unchecked local feature names must be unique valid UTF-8 tokens and must not duplicate typed features",
+            );
             return err;
         };
         if (rendered_features) |rendered| {

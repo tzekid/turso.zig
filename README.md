@@ -63,6 +63,12 @@ pub fn main() !void {
 | Cloud sync | Opt-in SDK Kit, caller-owned HTTP/filesystem transport, push, pull/apply, stats, checkpoint |
 | Raw ABI | Complete pinned `turso.h` and `turso_sync.h` declarations under `raw` |
 
+`FeatureSet` has a typed field for every experimental token parsed by SDK Kit
+v0.7.1, including `mvcc_passive_checkpoint`, and renders them in canonical
+order. `unchecked_extra` is an intentionally conspicuous escape hatch for
+unique, valid UTF-8 tokens not yet known to this binding. Upstream may silently
+ignore those names; accepting their syntax is not a support promise.
+
 The release matrix runs natively on Linux, macOS, and Windows for x86_64 and
 aarch64. Linux additionally runs fault injection, Valgrind ownership smokes,
 deterministic soak tests, package extraction tests, and a real two-client sync

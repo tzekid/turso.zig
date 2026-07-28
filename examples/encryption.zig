@@ -76,6 +76,8 @@ fn runEncryptedRoundTrip(
     try encryption.validate();
 
     {
+        // Supplying EncryptionOptions also enables FeatureSet.encryption; no
+        // duplicate experimental token is required here.
         var database = try turso.Database.open(allocator, .{
             .path = database_path,
             .encryption = encryption,

@@ -48,50 +48,71 @@ pub const FeatureSet = struct {
     generated_columns: bool = false,
     multiprocess_wal: bool = false,
     without_rowid: bool = false,
-    extra: []const []const u8 = &.{},
+    mvcc_passive_checkpoint: bool = false,
+    /// Unverified feature names forwarded to the pinned SDK Kit parser.
+    ///
+    /// Upstream silently ignores unknown names. Syntactic acceptance here is
+    /// therefore not a support or compatibility promise.
+    unchecked_extra: []const []const u8 = &.{},
 
     pub const RenderError = std.mem.Allocator.Error || error{InvalidFeatureName};
 
     pub fn render(self: FeatureSet, allocator: std.mem.Allocator) RenderError!?[]u8 {
-        const known = [_]?[]const u8{
-            if (self.views) "views" else null,
-            if (self.index_method) "index_method" else null,
-            if (self.custom_types) "custom_types" else null,
-            if (self.autovacuum) "autovacuum" else null,
-            if (self.vacuum) "vacuum" else null,
-            if (self.encryption) "encryption" else null,
-            if (self.attach) "attach" else null,
-            if (self.generated_columns) "generated_columns" else null,
-            if (self.multiprocess_wal) "multiprocess_wal" else null,
-            if (self.without_rowid) "without_rowid" else null,
+        const known = [_]KnownFeature{
+            .{ .name = "views", .enabled = self.views },
+            .{ .name = "index_method", .enabled = self.index_method },
+            .{ .name = "custom_types", .enabled = self.custom_types },
+            .{ .name = "autovacuum", .enabled = self.autovacuum },
+            .{ .name = "vacuum", .enabled = self.vacuum },
+            .{ .name = "encryption", .enabled = self.encryption },
+            .{ .name = "attach", .enabled = self.attach },
+            .{ .name = "generated_columns", .enabled = self.generated_columns },
+            .{ .name = "multiprocess_wal", .enabled = self.multiprocess_wal },
+            .{ .name = "without_rowid", .enabled = self.without_rowid },
+            .{
+                .name = "mvcc_passive_checkpoint",
+                .enabled = self.mvcc_passive_checkpoint,
+            },
         };
 
         var count: usize = 0;
         var byte_len: usize = 0;
-        for (known) |maybe_name| {
-            if (maybe_name) |name| {
-                count += 1;
-                byte_len += name.len;
-            }
+        for (known) |feature| {
+            if (!feature.enabled) continue;
+            count = std.math.add(usize, count, 1) catch return error.OutOfMemory;
+            byte_len = std.math.add(usize, byte_len, feature.name.len) catch
+                return error.OutOfMemory;
         }
-        for (self.extra) |name| {
+        for (self.unchecked_extra, 0..) |name, index| {
             try validateFeatureName(name);
-            count += 1;
-            byte_len += name.len;
+            for (known) |feature| {
+                if (std.mem.eql(u8, name, feature.name)) {
+                    return error.InvalidFeatureName;
+                }
+            }
+            for (self.unchecked_extra[0..index]) |earlier| {
+                if (std.mem.eql(u8, name, earlier)) {
+                    return error.InvalidFeatureName;
+                }
+            }
+            count = std.math.add(usize, count, 1) catch return error.OutOfMemory;
+            byte_len = std.math.add(usize, byte_len, name.len) catch
+                return error.OutOfMemory;
         }
         if (count == 0) return null;
 
-        const result = try allocator.alloc(u8, byte_len + count - 1);
+        const result_len = std.math.add(usize, byte_len, count - 1) catch
+            return error.OutOfMemory;
+        const result = try allocator.alloc(u8, result_len);
         errdefer allocator.free(result);
 
         var cursor: usize = 0;
         var emitted: usize = 0;
-        for (known) |maybe_name| {
-            if (maybe_name) |name| {
-                appendFeature(result, &cursor, &emitted, name);
-            }
+        for (known) |feature| {
+            if (!feature.enabled) continue;
+            appendFeature(result, &cursor, &emitted, feature.name);
         }
-        for (self.extra) |name| {
+        for (self.unchecked_extra) |name| {
             appendFeature(result, &cursor, &emitted, name);
         }
         std.debug.assert(cursor == result.len);
@@ -99,7 +120,9 @@ pub const FeatureSet = struct {
     }
 
     fn validateFeatureName(name: []const u8) error{InvalidFeatureName}!void {
-        if (name.len == 0) return error.InvalidFeatureName;
+        if (name.len == 0 or !std.unicode.utf8ValidateSlice(name)) {
+            return error.InvalidFeatureName;
+        }
         if (!std.mem.eql(u8, name, std.mem.trim(u8, name, " \t\r\n"))) {
             return error.InvalidFeatureName;
         }
@@ -122,7 +145,19 @@ pub const FeatureSet = struct {
         cursor.* += name.len;
         emitted.* += 1;
     }
+
+    const KnownFeature = struct {
+        name: []const u8,
+        enabled: bool,
+    };
 };
+
+/// Encryption configuration requires the matching SDK Kit feature token.
+/// Kept in this internal module so local and sync database construction cannot
+/// drift.
+pub fn requireEncryptionFeature(features: *FeatureSet, configured: bool) void {
+    if (configured) features.encryption = true;
+}
 
 pub const EncryptionCipher = enum {
     aes128gcm,
@@ -202,50 +237,105 @@ test "VFS validation rejects target-invalid built-ins and empty custom names" {
     }
 }
 
-test "FeatureSet renders known features in stable order" {
+test "FeatureSet renders every v0.7.1 feature exactly once in stable order" {
     const allocator = std.testing.allocator;
     const rendered = (try (FeatureSet{
         .views = true,
+        .index_method = true,
+        .custom_types = true,
+        .autovacuum = true,
+        .vacuum = true,
         .encryption = true,
+        .attach = true,
+        .generated_columns = true,
+        .multiprocess_wal = true,
         .without_rowid = true,
+        .mvcc_passive_checkpoint = true,
     }).render(allocator)).?;
     defer allocator.free(rendered);
 
     try std.testing.expectEqualStrings(
-        "views,encryption,without_rowid",
+        "views,index_method,custom_types,autovacuum,vacuum,encryption," ++
+            "attach,generated_columns,multiprocess_wal,without_rowid," ++
+            "mvcc_passive_checkpoint",
         rendered,
     );
 }
 
-test "FeatureSet appends validated forward-compatible features" {
+test "FeatureSet appends syntactically valid unchecked names in caller order" {
     const allocator = std.testing.allocator;
-    const extra = [_][]const u8{ "future_one", "future_two" };
+    const unchecked = [_][]const u8{ "future_two", "future_one" };
     const rendered = (try (FeatureSet{
         .attach = true,
-        .extra = &extra,
+        .unchecked_extra = &unchecked,
     }).render(allocator)).?;
     defer allocator.free(rendered);
 
     try std.testing.expectEqualStrings(
-        "attach,future_one,future_two",
+        "attach,future_two,future_one",
         rendered,
     );
 }
 
-test "FeatureSet returns null for defaults and rejects ambiguous names" {
+test "FeatureSet returns null for defaults and rejects invalid unchecked names" {
     try std.testing.expect((try (FeatureSet{}).render(std.testing.allocator)) == null);
 
-    const comma = [_][]const u8{"bad,name"};
+    const invalid = [_][]const []const u8{
+        &.{""},
+        &.{"bad,name"},
+        &.{"bad\x00name"},
+        &.{" bad"},
+        &.{"bad "},
+        &.{&.{0xff}},
+    };
+    for (invalid) |names| {
+        try std.testing.expectError(
+            error.InvalidFeatureName,
+            (FeatureSet{ .unchecked_extra = names }).render(std.testing.allocator),
+        );
+    }
+}
+
+test "FeatureSet rejects duplicate and typed unchecked names" {
+    const duplicate = [_][]const u8{ "future", "future" };
     try std.testing.expectError(
         error.InvalidFeatureName,
-        (FeatureSet{ .extra = &comma }).render(std.testing.allocator),
+        (FeatureSet{ .unchecked_extra = &duplicate }).render(std.testing.allocator),
     );
 
-    const whitespace = [_][]const u8{" bad"};
+    const known = [_][]const u8{"views"};
     try std.testing.expectError(
         error.InvalidFeatureName,
-        (FeatureSet{ .extra = &whitespace }).render(std.testing.allocator),
+        (FeatureSet{ .unchecked_extra = &known }).render(std.testing.allocator),
     );
+    try std.testing.expectError(
+        error.InvalidFeatureName,
+        (FeatureSet{
+            .views = true,
+            .unchecked_extra = &known,
+        }).render(std.testing.allocator),
+    );
+}
+
+test "FeatureSet rendering reports allocation failure without partial ownership" {
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    failing.fail_index = failing.alloc_index;
+    try std.testing.expectError(
+        error.OutOfMemory,
+        (FeatureSet{ .views = true }).render(failing.allocator()),
+    );
+    try std.testing.expect(failing.has_induced_failure);
+}
+
+test "encryption configuration enables its required feature without clearing others" {
+    var features = FeatureSet{ .views = true };
+    requireEncryptionFeature(&features, true);
+    const rendered = (try features.render(std.testing.allocator)).?;
+    defer std.testing.allocator.free(rendered);
+    try std.testing.expectEqualStrings("views,encryption", rendered);
+
+    requireEncryptionFeature(&features, false);
+    try std.testing.expect(features.encryption);
 }
 
 test "EncryptionOptions validates cipher-specific hex key sizes" {

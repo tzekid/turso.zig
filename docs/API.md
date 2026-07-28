@@ -86,6 +86,27 @@ one statement, bind with checked conversion, and execute or transfer its Rows
 owner without retries. Existing `exec`/`query` calls taking `[]const Value`
 remain source-compatible.
 
+## Feature configuration
+
+`FeatureSet` exposes every token parsed by the pinned v0.7.1 SDK Kit:
+`views`, `index_method`, `custom_types`, `autovacuum`, `vacuum`, `encryption`,
+`attach`, `generated_columns`, `multiprocess_wal`, `without_rowid`, and
+`mvcc_passive_checkpoint`. Enabled typed fields render once in that canonical
+order. Supplying `EncryptionOptions` implicitly enables `encryption` for both
+local and sync database construction.
+
+`unchecked_extra` forwards experimental names that this binding does not
+recognize. Each name must be non-empty, trimmed valid UTF-8 without a comma or
+NUL. Duplicates and every name already represented by a typed field are
+rejected before native construction. Accepted unchecked names retain caller
+order after the typed fields.
+
+The escape hatch is deliberately named `unchecked`: the upstream parser
+silently ignores unknown names, so successful validation and database opening
+do not prove that a feature exists or took effect. Unchecked names receive no
+compatibility guarantee and should be replaced with typed fields when the
+package pin learns them.
+
 ## Transactions and batches
 
 `Connection.begin` supports `.deferred`, `.immediate`, `.exclusive`, and Turso's `.concurrent` mode. A live Transaction exclusively borrows the Connection; direct Connection operations and nested transactions fail. `.concurrent` requires the upstream MVCC journal-mode precondition and exposes `BusySnapshot` without automatic retries.

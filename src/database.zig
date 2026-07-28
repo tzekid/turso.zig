@@ -69,9 +69,15 @@ pub const Database = struct {
         defer allocator.free(path);
 
         var features = options.features;
-        if (options.encryption) |_| features.encryption = true;
+        config_mod.requireEncryptionFeature(&features, options.encryption != null);
         const feature_bytes = features.render(allocator) catch |err| {
-            ffi.setWrapperError(options.diagnostics, "experimental feature names must be non-empty comma-free tokens");
+            ffi.setWrapperError(
+                options.diagnostics,
+                if (err == error.OutOfMemory)
+                    "experimental feature list could not be allocated"
+                else
+                    "unchecked feature names must be unique valid UTF-8 tokens and must not duplicate typed features",
+            );
             return err;
         };
         defer if (feature_bytes) |bytes| allocator.free(bytes);

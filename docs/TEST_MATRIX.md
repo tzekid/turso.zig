@@ -84,7 +84,9 @@ idempotent cleanup on one owner variable, parent/child teardown, stale row
 borrows, reusable prepared-query leases, multiple idle statements with one
 active execution, reset failure, structured-batch partial progress and bounded
 materialization, transaction and rollback-failure poisoning, callback context
-and aggregate-state destruction, and sync transfer/consume rules.
+and aggregate-state destruction, and sync transfer/consume rules. Pure config
+tests pin every v0.7.1 feature token and its order, reject duplicate/known or
+malformed unchecked names, and exercise feature-render allocation failure.
 
 The safe wrapper never races a handle in ways forbidden by the C header. One
 `Database` may fan out independent connections. A Connection may retain

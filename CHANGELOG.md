@@ -17,6 +17,8 @@ is pre-1.0.
 - Added a caller-owned authorization provider resolved independently for every
   sync HTTP item, with static-header compatibility, explicit null injection,
   and fixed secret-free failure categories.
+- Added typed `mvcc_passive_checkpoint` feature configuration and complete
+  deterministic rendering for every feature parsed by SDK Kit v0.7.1.
 
 ### Changed
 
@@ -31,6 +33,9 @@ is pre-1.0.
   clarified that plaintext HTTP requires explicit `allow_http` opt-in.
 - Rejected file-backed partial bootstrap outside Linux before native
   construction, while retaining portable in-memory partial bootstrap.
+- Renamed `FeatureSet.extra` to `unchecked_extra`; unchecked names must now be
+  unique valid UTF-8 tokens and cannot duplicate any typed feature. Upstream
+  may still ignore syntactically accepted unknown names.
 
 ## [0.1.0] - 2026-07-27
 
