@@ -59,20 +59,43 @@ pub const AutocommitExpectation = enum {
     any,
 };
 
-/// Heap-stable per-connection statement control. Connection owns this storage;
-/// Statement and borrowed Row values only retain pointers to it.
+/// Heap-stable per-connection statement registry. Connection owns this
+/// storage; statement state retains a pointer to it.
 pub const OperationControl = struct {
-    active: bool = false,
-    statement_alive: bool = false,
-    generation: u64 = 0,
+    live_statements: usize = 0,
+    active_statement: ?*anyopaque = null,
+    row_generation: u64 = 0,
     aggregate_cleanup_context: ?*anyopaque = null,
     aggregate_cleanup: ?*const fn (*anyopaque) void = null,
     autocommit_context: ?*anyopaque = null,
     autocommit_check: ?*const fn (*anyopaque, AutocommitExpectation) bool = null,
-    autocommit_expectation: AutocommitExpectation = .enabled,
 
-    pub fn invalidate(self: *OperationControl) void {
-        self.generation +%= 1;
+    pub fn register(self: *OperationControl) void {
+        self.live_statements += 1;
+    }
+
+    pub fn unregister(self: *OperationControl) void {
+        std.debug.assert(self.live_statements != 0);
+        self.live_statements -= 1;
+    }
+
+    pub fn acquire(self: *OperationControl, statement: *anyopaque) bool {
+        if (self.active_statement != null) return false;
+        self.active_statement = statement;
+        return true;
+    }
+
+    pub fn release(self: *OperationControl, statement: *anyopaque) void {
+        std.debug.assert(self.active_statement == statement);
+        self.active_statement = null;
+    }
+
+    pub fn isActive(self: *const OperationControl, statement: *const anyopaque) bool {
+        return self.active_statement == statement;
+    }
+
+    pub fn invalidateRows(self: *OperationControl) void {
+        self.row_generation +%= 1;
     }
 
     pub fn cleanupAggregates(self: *OperationControl) void {
@@ -80,10 +103,13 @@ pub const OperationControl = struct {
         cleanup(self.aggregate_cleanup_context.?);
     }
 
-    pub fn autocommitInvariantHolds(self: *OperationControl) bool {
-        if (self.autocommit_expectation == .any) return true;
+    pub fn autocommitInvariantHolds(
+        self: *OperationControl,
+        expectation: AutocommitExpectation,
+    ) bool {
+        if (expectation == .any) return true;
         const check = self.autocommit_check orelse return false;
-        return check(self.autocommit_context.?, self.autocommit_expectation);
+        return check(self.autocommit_context.?, expectation);
     }
 };
 
@@ -208,7 +234,9 @@ pub const Row = struct {
     }
 
     fn ensureValid(self: Row) status_mod.Error!void {
-        if (!self.control.statement_alive or self.control.generation != self.generation) {
+        if (self.control.active_statement == null or
+            self.control.row_generation != self.generation)
+        {
             return error.InvalidState;
         }
     }
@@ -223,7 +251,7 @@ pub fn init(
         .statement = statement,
         .column_count = column_count,
         .control = control,
-        .generation = control.generation,
+        .generation = control.row_generation,
     };
 }
 

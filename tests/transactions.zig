@@ -149,6 +149,36 @@ test "transaction exclusively borrows stable connection state" {
     try std.testing.expect(try moved.isAutocommit());
 }
 
+test "transactions allow multiple idle statements but cannot end with live children" {
+    var diagnostics = turso.Diagnostics{};
+    var database = try turso.Database.open(std.testing.allocator, .{ .path = ":memory:" });
+    defer database.deinit();
+    var connection = try database.connect(.{});
+    defer connection.deinit();
+
+    var transaction = try connection.begin(.deferred, .{});
+    defer transaction.deinit();
+    var first = try transaction.prepare("SELECT ?1", .{});
+    var second = try transaction.prepare("SELECT ?1 + 10", .{});
+
+    var first_rows = try first.query(&.{.{ .integer = 1 }}, null);
+    try std.testing.expectError(
+        error.InvalidState,
+        second.query(&.{.{ .integer = 2 }}, &diagnostics),
+    );
+    try first_rows.finish(null);
+
+    var second_rows = try second.query(&.{.{ .integer = 2 }}, null);
+    try std.testing.expectEqual(@as(i64, 12), try (try second_rows.next()).?.get(i64, 0));
+    try second_rows.finish(null);
+
+    try std.testing.expectError(error.InvalidState, transaction.commit(&diagnostics));
+    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "prepared statement") != null);
+    first.deinit();
+    second.deinit();
+    try transaction.commit(null);
+}
+
 test "batch failure is atomic when explicitly wrapped in a transaction" {
     var database = try turso.Database.open(std.testing.allocator, .{ .path = ":memory:" });
     defer database.deinit();

@@ -623,6 +623,17 @@ test "explicit reset sweeps sibling aggregate states after an error" {
     try std.testing.expectEqual(survivor.states_initialized, survivor.states_dropped);
     try std.testing.expectEqual(failing.states_initialized, failing.states_dropped);
 
+    var rows = try statement.query(&.{}, null);
+    try std.testing.expectError(error.TursoFailure, rows.next());
+    try rows.cancel(null);
+    try std.testing.expectEqual(survivor.states_initialized, survivor.states_dropped);
+    try std.testing.expectEqual(failing.states_initialized, failing.states_dropped);
+
+    // Successful checked cleanup returned the prepared owner to ready even
+    // though the preceding row step failed.
+    rows = try statement.query(&.{}, null);
+    try rows.cancel(null);
+
     statement.deinit();
     connection.deinit();
     database.deinit();

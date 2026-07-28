@@ -49,9 +49,9 @@ pub const OperationOptions = struct {
     diagnostics: ?*Diagnostics = null,
 };
 
-/// Heap-stable state shared by a Connection, its current Statement/Rows, and
-/// its current Transaction. Moving the public Connection value does not move
-/// this control block or invalidate child ownership pointers.
+/// Heap-stable state shared by a Connection, all of its prepared statements,
+/// its active Rows lease, and its current Transaction. Moving the public
+/// Connection value does not move this control block or invalidate children.
 const Control = struct {
     allocator: std.mem.Allocator,
     handle: ?*raw.turso_connection_t,
@@ -146,6 +146,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         return functions_mod.registerScalarFunction(control.allocator, connection, name, options, diagnostics);
     }
@@ -160,6 +161,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         return functions_mod.registerAggregateFunction(
             control.allocator,
@@ -177,6 +179,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         return functions_mod.unregisterFunction(control.allocator, connection, name, diagnostics);
     }
@@ -191,6 +194,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         return functions_mod.registerCollation(control.allocator, connection, name, options, diagnostics);
     }
@@ -201,6 +205,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         return functions_mod.unregisterCollation(control.allocator, connection, name, diagnostics);
     }
@@ -215,6 +220,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         var native_error: ffi.NativeError = null;
         const native_status = raw.turso_connection_enable_load_extension(connection, enabled, &native_error);
@@ -236,6 +242,7 @@ pub const Connection = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
+        try requireNoLiveStatements(control, diagnostics);
         const connection = try requireAvailable(control, diagnostics, false);
         const path_z = cstring.dupe(control.allocator, path) catch |err| {
             ffi.setWrapperError(diagnostics, "extension path must be valid UTF-8 without an interior NUL and must be copyable");
@@ -265,6 +272,7 @@ pub const Connection = struct {
         options: OperationOptions,
     ) status_mod.Error!TransactionHandle {
         const control = try self.requireControl(options.diagnostics);
+        try requireNoLiveStatements(control, options.diagnostics);
         const connection = try requireAvailable(control, options.diagnostics, false);
         if (!raw.turso_connection_get_autocommit(connection)) {
             ffi.setWrapperError(options.diagnostics, "nested transactions are not supported");
@@ -300,8 +308,8 @@ pub const Connection = struct {
 
     pub fn close(self: *Connection, diagnostics: ?*Diagnostics) status_mod.Error!void {
         const control = try self.requireControl(diagnostics);
-        if (control.operation.active or control.operation.statement_alive) {
-            ffi.setWrapperError(diagnostics, "connection still owns an active statement or rows iterator");
+        if (control.operation.live_statements != 0) {
+            ffi.setWrapperError(diagnostics, "connection still owns one or more live statements or rows iterators");
             return error.InvalidState;
         }
         if (control.transaction_active) {
@@ -338,8 +346,7 @@ pub const Connection = struct {
         if (control.closed or
             control.poisoned or
             control.transaction_active or
-            control.operation.active or
-            control.operation.statement_alive)
+            control.operation.active_statement != null)
         {
             return error.InvalidState;
         }
@@ -352,8 +359,7 @@ pub const Connection = struct {
         if (control.closed or
             control.poisoned or
             control.transaction_active or
-            control.operation.active or
-            control.operation.statement_alive)
+            control.operation.active_statement != null)
         {
             return error.InvalidState;
         }
@@ -362,8 +368,8 @@ pub const Connection = struct {
 
     pub fn deinit(self: *Connection) void {
         const control = self.control orelse return;
-        if (control.operation.active or control.operation.statement_alive) {
-            @panic("turso.Connection.deinit called before its statement or rows iterator was deinited");
+        if (control.operation.live_statements != 0) {
+            @panic("turso.Connection.deinit called before all statements and rows iterators were deinited");
         }
         if (control.transaction_active) {
             @panic("turso.Connection.deinit called before its transaction was finished or deinited");
@@ -391,8 +397,10 @@ pub const Connection = struct {
 };
 
 /// Move-only exclusive transaction borrowing heap-stable Connection state. A
-/// live transaction prevents direct Connection use or deinit. Statement and
-/// Rows values returned here must be deinited before another transaction method.
+/// live transaction prevents direct Connection use or deinit. Multiple
+/// transaction-scoped statements may remain idle, but an active Rows lease
+/// blocks other work and every statement must be deinited before transaction
+/// termination.
 pub const TransactionHandle = struct {
     control: *Control,
     state: TransactionState = .active,
@@ -477,8 +485,8 @@ pub const TransactionHandle = struct {
     /// the Connection so uncertain native state can only be released by deinit.
     pub fn deinit(self: *TransactionHandle) void {
         if (self.state != .active) return;
-        if (self.control.operation.active or self.control.operation.statement_alive) {
-            @panic("turso.Transaction.deinit called before its statement or rows iterator was deinited");
+        if (self.control.operation.live_statements != 0) {
+            @panic("turso.Transaction.deinit called before all statements and rows iterators were deinited");
         }
         const connection = self.control.handle orelse {
             self.state = .failed;
@@ -503,6 +511,7 @@ pub const TransactionHandle = struct {
         diagnostics: ?*Diagnostics,
     ) status_mod.Error!void {
         try self.requireActive(diagnostics);
+        try requireNoLiveStatements(self.control, diagnostics);
         _ = execControl(self.control, sql, &.{}, .{ .diagnostics = diagnostics }, true, .any) catch |err| {
             // Preserve active ownership on failure so rollback can be retried.
             return err;
@@ -554,6 +563,7 @@ fn prepareControl(
         return error.InvalidState;
     }
     return statement_mod.init(
+        control.allocator,
         handle.?,
         &control.operation,
         autocommit_expectation,
@@ -665,7 +675,8 @@ fn execBatchControl(
             return error.InvalidState;
         }
 
-        var statement = statement_mod.init(
+        var statement = try statement_mod.init(
+            control.allocator,
             handle.?,
             &control.operation,
             autocommit_expectation,
@@ -704,11 +715,23 @@ fn requireAvailable(
             "transaction is no longer active");
         return error.InvalidState;
     }
-    if (control.operation.active or control.operation.statement_alive) {
-        ffi.setWrapperError(diagnostics, "connection already owns an active statement or rows iterator");
+    if (control.operation.active_statement != null) {
+        ffi.setWrapperError(diagnostics, "connection already owns an active statement execution or rows iterator");
         return error.InvalidState;
     }
     return control.handle.?;
+}
+
+fn requireNoLiveStatements(
+    control: *Control,
+    diagnostics: ?*Diagnostics,
+) status_mod.Error!void {
+    if (control.operation.live_statements == 0) return;
+    ffi.setWrapperError(
+        diagnostics,
+        "operation requires every prepared statement and rows iterator to be released",
+    );
+    return error.InvalidState;
 }
 
 pub fn init(

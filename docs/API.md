@@ -6,7 +6,7 @@ This document describes the implemented blocking API. The raw pinned SDK Kit ABI
 
 `Database`, `Connection`, `Statement`, `Rows`, `Transaction`, `OwnedValue`, and owned metadata values are move-only owners by convention. Zig assignment is a bitwise copy and cannot invoke a move constructor, so copying an owner and using both aliases is unsupported. When relocating an owner explicitly, assign it once and set the old variable to `undefined`.
 
-The wrapper keeps Database and Connection control state on the heap. Relocating a Database while its Connections are alive, or a Connection while a Statement/Transaction is alive, does not invalidate the child. Destruction order still matters:
+The wrapper keeps Database, Connection, and prepared-statement control state on the heap. Relocating a Database while its Connections are alive, a Connection while a Statement/Transaction is alive, or a Statement while Rows leases it does not invalidate the child. Destruction order still matters:
 
 ~~~text
 Row < Rows/Statement < Transaction < Connection < Database
@@ -31,7 +31,7 @@ Use `Row.toOwned(allocator, index)`, typed decoding into `[]u8`/`OwnedValue`, or
 
 ## Statements
 
-The reusable prepared flow is:
+The reusable non-row flow is:
 
 ~~~text
 prepare -> bind/bindParams -> execute -> reset -> bind -> execute -> ... -> deinit
@@ -39,13 +39,30 @@ prepare -> bind/bindParams -> execute -> reset -> bind -> execute -> ... -> dein
 
 Reset is accepted after a completed or failed execution, not before the first execution and not after finalization. Positional prepared reuse performs no Zig allocation after preparation; this is enforced by an allocator-failure test.
 
-For row-producing statements:
+Prepared row queries use either positional values or a tuple/named struct:
 
-- `finish` drains/finalizes and reports any error.
-- `cancel` resets pending iteration, finalizes, and reports any error.
-- `deinit` performs best-effort cancellation and cleanup when the result no longer matters.
+~~~text
+prepare -> query/queryParams -> Rows -> finish/cancel/deinit -> query again
+~~~
 
-Only one live Statement or Rows value is allowed per Connection. This deliberately conservative rule matches the upstream exclusive-use contract.
+- `finish` drains to `DONE`, resets, and reports any error.
+- `cancel` resets without draining and reports any error.
+- `deinit` performs best-effort reset when the result no longer matters.
+- `intoRows` remains an explicitly consuming compatibility path; its Rows owns
+  and releases the native statement instead of returning it.
+
+If row cleanup cannot reset the native handle, Rows still invalidates its
+borrows and releases the Connection's active slot, but the prepared Statement
+becomes terminal and may only be finalized or deinited. It is never reported
+ready after an unproven reset.
+
+Multiple prepared Statements may remain live and idle on one Connection. One
+execute call or Rows lease owns the connection-wide active slot; other
+statement and connection operations return `error.InvalidState` until that
+execution is released. Function/collation registration and extension-policy
+mutation remain blocked while any prepared statement is live because compiled
+programs may retain those registrations. Transaction termination and
+Connection close likewise require all statement owners to be released.
 
 ## Binding and decoding
 

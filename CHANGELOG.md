@@ -8,6 +8,9 @@ is pre-1.0.
 
 ### Changed
 
+- Made prepared SELECT statements reusable through `Statement.query` and
+  `queryParams`, with heap-stable Rows leases and multiple idle statements per
+  Connection while preserving one active execution.
 - Updated the pinned Turso SDK Kit source to v0.7.1; the audited base and sync
   C header bodies and exported symbol surfaces are unchanged from v0.7.0.
 - Scoped sync-operation recovery state to each heap-stable `SyncDatabase`

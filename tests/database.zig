@@ -144,7 +144,7 @@ test "connection close is rejected until each exclusive child is quiescent" {
 
     var statement = try connection.prepare("SELECT 1", .{});
     try std.testing.expectError(error.InvalidState, connection.close(&diagnostics));
-    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "active statement") != null);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "live statement") != null);
     statement.deinit();
 
     var rows = try connection.query("SELECT 1", &.{}, .{});

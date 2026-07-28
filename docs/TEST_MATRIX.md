@@ -79,12 +79,14 @@ workflow action is pinned to an exact commit.
 
 Tests cover partial construction, allocator failure, native error strings,
 idempotent cleanup on one owner variable, parent/child teardown, stale row
-borrows, connection/statement exclusivity, transaction poisoning, callback
-context and aggregate-state destruction, and sync transfer/consume rules.
+borrows, reusable prepared-query leases, multiple idle statements with one
+active execution, reset failure, transaction poisoning, callback context and
+aggregate-state destruction, and sync transfer/consume rules.
 
 The safe wrapper never races a handle in ways forbidden by the C header. One
-`Database` may fan out independent connections; each `Connection`, statement,
-and sync operation remains exclusive.
+`Database` may fan out independent connections. A Connection may retain
+multiple idle statements but admits only one active execution; each individual
+statement and sync operation remains exclusive.
 
 ### Durability and production behavior
 

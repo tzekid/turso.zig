@@ -37,30 +37,32 @@ pub fn main() !void {
     try insert.finish(null);
     insert.deinit();
 
-    var rows = try connection.query(
-        "SELECT id, name FROM people ORDER BY id",
-        &.{},
+    var select = try connection.prepare(
+        "SELECT id, name FROM people WHERE id >= :minimum ORDER BY id",
         .{},
     );
-    defer rows.deinit();
-    while (try rows.next()) |row| {
-        std.debug.print("{d}: {s}\n", .{
-            try row.get(i64, 0),
-            try row.get([]const u8, 1),
-        });
+    defer select.deinit();
+    for ([_]i64{ 1, 3 }) |minimum| {
+        var rows = try select.queryParams(.{ .minimum = minimum }, null);
+        defer rows.deinit();
+        while (try rows.next()) |row| {
+            std.debug.print("from {d}: {d}: {s}\n", .{
+                minimum,
+                try row.get(i64, 0),
+                try row.get([]const u8, 1),
+            });
+        }
+        // finish drains and resets this execution, returning `select` to ready.
+        try rows.finish(null);
     }
-    try rows.finish(null);
 
     // Early iteration is an explicit cancellation decision. This prevents
-    // deinit from silently being treated as successful completion.
-    var preview = try connection.query(
-        "SELECT name FROM people ORDER BY id",
-        &.{},
-        .{},
-    );
+    // deinit from silently being treated as successful completion and also
+    // returns the prepared statement to ready.
+    var preview = try select.queryParams(.{ .minimum = @as(i64, 1) }, null);
     defer preview.deinit();
     if (try preview.next()) |row| {
-        std.debug.print("preview: {s}\n", .{try row.get([]const u8, 0)});
+        std.debug.print("preview: {s}\n", .{try row.get([]const u8, 1)});
     }
     try preview.cancel(null);
 }

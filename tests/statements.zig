@@ -64,17 +64,124 @@ test "statement state and one-based bindings are enforced" {
     const invalid_utf8 = [_]u8{0xff};
     try std.testing.expectError(error.InvalidUtf8, statement.bind(1, .{ .text = &invalid_utf8 }, &diagnostics));
     try statement.bind(1, .{ .integer = 1 }, &diagnostics);
-    try std.testing.expectError(error.InvalidState, connection.prepare("SELECT 2", .{ .diagnostics = &diagnostics }));
-    try std.testing.expectError(error.InvalidState, connection.isAutocommit());
-    try std.testing.expectError(error.InvalidState, connection.lastInsertRowId());
+    var second = try connection.prepare("SELECT 2", .{ .diagnostics = &diagnostics });
+    defer second.deinit();
+    try std.testing.expect(try connection.isAutocommit());
+    _ = try connection.lastInsertRowId();
 
     var rows = try statement.intoRows(null);
     defer rows.deinit();
+    try std.testing.expectError(error.InvalidState, second.execute(&diagnostics));
     try std.testing.expectError(error.InvalidState, connection.isAutocommit());
     try std.testing.expectError(error.InvalidState, connection.lastInsertRowId());
     try std.testing.expect((try rows.next()) != null);
     try std.testing.expect((try rows.next()) == null);
     try std.testing.expect((try rows.next()) == null);
+}
+
+test "prepared queries reuse after finish cancel and best-effort rows cleanup" {
+    var database = try database_mod.Database.open(std.testing.allocator, .{ .path = ":memory:" });
+    defer database.deinit();
+    var connection = try database.connect(.{});
+    defer connection.deinit();
+
+    var positional = try connection.prepare(
+        "SELECT ?1 AS value UNION ALL SELECT ?1 + 1",
+        .{},
+    );
+    defer positional.deinit();
+
+    var first_rows = try positional.query(&.{.{ .integer = 10 }}, null);
+    const first = (try first_rows.next()).?;
+    try std.testing.expectEqual(@as(i64, 10), try first.get(i64, 0));
+    try first_rows.finish(null);
+    try std.testing.expectError(error.InvalidState, first.value(0));
+    first_rows.deinit();
+
+    var cancelled = try positional.query(&.{.{ .integer = 20 }}, null);
+    const cancelled_row = (try cancelled.next()).?;
+    try std.testing.expectEqual(@as(i64, 20), try cancelled_row.get(i64, 0));
+    try cancelled.cancel(null);
+    try std.testing.expectError(error.InvalidState, cancelled_row.value(0));
+    cancelled.deinit();
+
+    var abandoned = try positional.query(&.{.{ .integer = 30 }}, null);
+    try std.testing.expectEqual(@as(i64, 30), try (try abandoned.next()).?.get(i64, 0));
+    abandoned.deinit();
+
+    var final_rows = try positional.query(&.{.{ .integer = 40 }}, null);
+    try std.testing.expectEqual(@as(i64, 40), try (try final_rows.next()).?.get(i64, 0));
+    try std.testing.expectEqual(@as(i64, 41), try (try final_rows.next()).?.get(i64, 0));
+    try std.testing.expect((try final_rows.next()) == null);
+    try final_rows.finish(null);
+
+    var named = try connection.prepare("SELECT :value, @label", .{});
+    defer named.deinit();
+    var named_rows = try named.queryParams(.{ .value = @as(i64, 7), .label = "reused" }, null);
+    const named_row = (try named_rows.next()).?;
+    try std.testing.expectEqual(@as(i64, 7), try named_row.get(i64, 0));
+    try std.testing.expectEqualStrings("reused", try named_row.get([]const u8, 1));
+    try named_rows.finish(null);
+
+    named_rows = try named.queryParams(.{ .value = @as(i64, 8), .label = "again" }, null);
+    try std.testing.expectEqual(@as(i64, 8), try (try named_rows.next()).?.get(i64, 0));
+    try named_rows.cancel(null);
+}
+
+test "multiple idle statements execute sequentially and rows hold the active slot" {
+    var diagnostics = database_mod.Diagnostics{};
+    var database = try database_mod.Database.open(std.testing.allocator, .{ .path = ":memory:" });
+    defer database.deinit();
+    var connection = try database.connect(.{});
+    defer connection.deinit();
+
+    var first = try connection.prepare("SELECT ?1", .{});
+    defer first.deinit();
+    var second = try connection.prepare("SELECT ?1 + 100", .{});
+    defer second.deinit();
+
+    _ = try connection.exec("SELECT 0", &.{}, .{});
+    try std.testing.expect(try connection.isAutocommit());
+
+    var first_rows = try first.query(&.{.{ .integer = 1 }}, null);
+    try std.testing.expectError(
+        error.InvalidState,
+        second.query(&.{.{ .integer = 2 }}, &diagnostics),
+    );
+    try std.testing.expectError(
+        error.InvalidState,
+        connection.prepare("SELECT 3", .{ .diagnostics = &diagnostics }),
+    );
+    try std.testing.expectEqual(@as(i64, 1), try (try first_rows.next()).?.get(i64, 0));
+    try first_rows.finish(null);
+
+    var second_rows = try second.query(&.{.{ .integer = 2 }}, null);
+    try std.testing.expectEqual(@as(i64, 102), try (try second_rows.next()).?.get(i64, 0));
+    try second_rows.finish(null);
+
+    var first_again = try first.query(&.{.{ .integer = 3 }}, null);
+    try std.testing.expectEqual(@as(i64, 3), try (try first_again.next()).?.get(i64, 0));
+    try first_again.finish(null);
+}
+
+test "moving a prepared owner while rows are live preserves the lease" {
+    var database = try database_mod.Database.open(std.testing.allocator, .{ .path = ":memory:" });
+    defer database.deinit();
+    var connection = try database.connect(.{});
+    defer connection.deinit();
+
+    var original = try connection.prepare("SELECT ?1", .{});
+    var rows = try original.query(&.{.{ .integer = 55 }}, null);
+    var moved = original;
+    original = undefined;
+    defer moved.deinit();
+
+    try std.testing.expectEqual(@as(i64, 55), try (try rows.next()).?.get(i64, 0));
+    try rows.finish(null);
+
+    rows = try moved.query(&.{.{ .integer = 56 }}, null);
+    try std.testing.expectEqual(@as(i64, 56), try (try rows.next()).?.get(i64, 0));
+    try rows.finish(null);
 }
 
 test "empty Unicode and large length-delimited values round trip exactly" {

@@ -43,6 +43,7 @@ static uint32_t configured_execute_io_turns;
 static uint32_t configured_step_io_turns;
 static uint32_t configured_finalize_io_turns;
 static uint32_t configured_fail_run_io_call;
+static uint32_t configured_fail_reset_call;
 
 void statement_io_fixture_reset(
     uint32_t execute_io_turns,
@@ -56,6 +57,12 @@ void statement_io_fixture_reset(
     configured_step_io_turns = step_io_turns;
     configured_finalize_io_turns = finalize_io_turns;
     configured_fail_run_io_call = fail_run_io_call;
+    configured_fail_reset_call = 0;
+}
+
+void statement_io_fixture_fail_reset_call(uint32_t call)
+{
+    configured_fail_reset_call = call;
 }
 
 void *statement_io_fixture_connection(void)
@@ -172,9 +179,20 @@ turso_status_code_t turso_statement_reset(
     const turso_statement_t *statement_const,
     const char **error_out)
 {
-    (void)error_out;
     struct turso_statement *statement = (struct turso_statement *)statement_const;
     stats.reset_calls += 1;
+    if (configured_fail_reset_call != 0 &&
+        stats.reset_calls == configured_fail_reset_call) {
+        if (error_out != NULL) {
+            const char message[] = "fixture reset failure";
+            char *copy = malloc(sizeof(message));
+            if (copy != NULL) {
+                memcpy(copy, message, sizeof(message));
+                *error_out = copy;
+            }
+        }
+        return TURSO_IOERR;
+    }
     statement->execute_io_turns = 0;
     statement->step_io_turns = 0;
     statement->pending = PENDING_NONE;
@@ -201,6 +219,69 @@ int64_t turso_statement_column_count(const turso_statement_t *statement)
 {
     (void)statement;
     return 1;
+}
+
+int64_t turso_statement_parameters_count(const turso_statement_t *statement)
+{
+    (void)statement;
+    return 0;
+}
+
+turso_status_code_t turso_statement_bind_positional_null(
+    const turso_statement_t *statement,
+    size_t position)
+{
+    (void)statement;
+    (void)position;
+    return TURSO_OK;
+}
+
+turso_status_code_t turso_statement_bind_positional_int(
+    const turso_statement_t *statement,
+    size_t position,
+    int64_t value)
+{
+    (void)statement;
+    (void)position;
+    (void)value;
+    return TURSO_OK;
+}
+
+turso_status_code_t turso_statement_bind_positional_double(
+    const turso_statement_t *statement,
+    size_t position,
+    double value)
+{
+    (void)statement;
+    (void)position;
+    (void)value;
+    return TURSO_OK;
+}
+
+turso_status_code_t turso_statement_bind_positional_text(
+    const turso_statement_t *statement,
+    size_t position,
+    const char *ptr,
+    size_t len)
+{
+    (void)statement;
+    (void)position;
+    (void)ptr;
+    (void)len;
+    return TURSO_OK;
+}
+
+turso_status_code_t turso_statement_bind_positional_blob(
+    const turso_statement_t *statement,
+    size_t position,
+    const char *ptr,
+    size_t len)
+{
+    (void)statement;
+    (void)position;
+    (void)ptr;
+    (void)len;
+    return TURSO_OK;
 }
 
 bool turso_connection_get_autocommit(const turso_connection_t *connection)

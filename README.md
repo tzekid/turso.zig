@@ -53,7 +53,7 @@ pub fn main() !void {
 | Area | Support |
 | --- | --- |
 | Database access | Memory and file databases, source or system SDK Kit, static or dynamic linkage |
-| Queries | Prepared and one-shot statements, positional/named parameters, batches, typed row decoding |
+| Queries | Reusable prepared and one-shot statements, positional/named parameters, batches, typed row decoding |
 | Values | Null, integer, real, UTF-8 text, arbitrary blobs, borrowed and owned representations |
 | Transactions | Deferred, immediate, exclusive, and concurrent modes with explicit commit/rollback |
 | Extensions | Managed scalar/aggregate functions, collations, and opt-in extension loading |
@@ -151,6 +151,12 @@ expire on the next statement operation. Use `row.toOwned` or typed owned
 decoding when data must outlive iteration. Supplied `Diagnostics` values copy
 native error text into a fixed buffer; native strings are released on every
 path.
+
+Prepared statements keep heap-stable state: multiple statements may remain
+idle on one Connection, while exactly one execution or Rows lease is active.
+`Statement.query` and `queryParams` return a temporary Rows lease; `finish`,
+`cancel`, or `deinit` resets that execution so the Statement can be rebound.
+The older `intoRows` path remains explicitly consuming.
 
 See [docs/API.md](docs/API.md) and [docs/CALLBACKS.md](docs/CALLBACKS.md) for
 the complete lifecycle contract. Generated API documentation is available with

@@ -19,6 +19,7 @@ extern fn statement_io_fixture_reset(
     finalize_io_turns: u32,
     fail_run_io_call: u32,
 ) void;
+extern fn statement_io_fixture_fail_reset_call(call: u32) void;
 extern fn statement_io_fixture_connection() *anyopaque;
 extern fn statement_io_fixture_stats() FixtureStats;
 
@@ -133,6 +134,61 @@ test "rows cancellation aborts pending IO without driving it" {
     try std.testing.expectEqual(@as(u32, 1), stats.reset_calls);
     try std.testing.expectEqual(@as(u32, 0), stats.run_io_calls);
     try expectExactCleanup(stats, owners.load(.acquire));
+}
+
+test "prepared rows reset failure releases the active slot without false reuse" {
+    statement_io_fixture_reset(0, 0, 0, 0);
+    statement_io_fixture_fail_reset_call(1);
+    var owners = std.atomic.Value(usize).init(1);
+    var connection = try initInline(&owners);
+    var diagnostics = connection_mod.Diagnostics{};
+
+    var statement = try connection.prepare("fixture reset failure", .{});
+    var rows = try statement.query(&.{}, null);
+    try std.testing.expectError(error.Io, rows.cancel(&diagnostics));
+    try std.testing.expectEqualStrings("fixture reset failure", diagnostics.text());
+    try std.testing.expectError(error.InvalidState, statement.query(&.{}, null));
+
+    var independent = try connection.prepare("fixture independent", .{});
+    independent.deinit();
+    statement.deinit();
+    connection.deinit();
+
+    const stats = statement_io_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 1), stats.reset_calls);
+    try std.testing.expectEqual(@as(u32, 2), stats.prepare_calls);
+    try std.testing.expectEqual(@as(u32, 2), stats.statement_deinit_calls);
+    try std.testing.expectEqual(@as(u32, 1), stats.connection_deinit_calls);
+    try std.testing.expectEqual(@as(u32, 1), stats.string_deinit_calls);
+    try std.testing.expectEqual(@as(usize, 0), owners.load(.acquire));
+}
+
+test "statement-state allocation failure releases the native handle" {
+    statement_io_fixture_reset(0, 0, 0, 0);
+    var allocator_probe = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    const allocator = allocator_probe.allocator();
+    var owners = std.atomic.Value(usize).init(1);
+    var connection = try connection_mod.init(
+        allocator,
+        @ptrCast(statement_io_fixture_connection()),
+        &owners,
+    );
+
+    // The SQL copy succeeds; the following heap-stable statement-state
+    // allocation fails after native prepare has returned a handle.
+    allocator_probe.fail_index = allocator_probe.alloc_index + 1;
+    try std.testing.expectError(
+        error.OutOfMemory,
+        connection.prepare("fixture allocation failure", .{}),
+    );
+    connection.deinit();
+
+    const stats = statement_io_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 1), stats.prepare_calls);
+    try std.testing.expectEqual(@as(u32, 1), stats.statement_deinit_calls);
+    try std.testing.expectEqual(@as(u32, 1), stats.connection_deinit_calls);
+    try std.testing.expectEqual(@as(usize, 0), owners.load(.acquire));
+    try std.testing.expect(allocator_probe.has_induced_failure);
 }
 
 fn initInline(owners: *std.atomic.Value(usize)) !connection_mod.Connection {
