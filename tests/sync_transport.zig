@@ -301,6 +301,66 @@ test "out-of-range HTTP status is poisoned without truncation or secret leakage"
     try closeAndDeinit(&database);
 }
 
+test "standard adapter rejects invalid HTTP headers before network I/O" {
+    var client: std.http.Client = .{
+        .allocator = std.testing.allocator,
+        .io = std.testing.io,
+    };
+    defer client.deinit();
+    var adapter = sync.StandardTransport{
+        .allocator = std.testing.allocator,
+        .io = std.testing.io,
+        .client = &client,
+        .root_dir = .cwd(),
+    };
+    var unused_item = sync.IoItem{ .state = null, .handle = null };
+    var writer = sync.ResponseWriter{ .buffer = .{
+        .item = &unused_item,
+        .diagnostics = null,
+    } };
+
+    const invalid_names = [_][]const u8{
+        "",
+        "bad name",
+        "bad:name",
+        "bad\tname",
+        "bad\x00name",
+        "bad\x80name",
+    };
+    for (invalid_names) |name| {
+        const headers = [_]sync.TransportHeader{.{
+            .name = name,
+            .value = "value",
+        }};
+        try std.testing.expectError(
+            error.InvalidHttpHeader,
+            adapter.request(.{
+                .url = "https://example.invalid",
+                .method = "GET",
+                .path = "/",
+                .body = "",
+                .headers = &headers,
+                .authorization = null,
+            }, &writer),
+        );
+    }
+
+    try std.testing.expectError(
+        error.InvalidHttpHeader,
+        adapter.request(.{
+            .url = "https://example.invalid",
+            .method = "GET",
+            .path = "/",
+            .body = "",
+            .headers = &.{},
+            .authorization = .{
+                .name = "authorization",
+                .value = "Bearer secret\r\nx-injected: value",
+            },
+        }, &writer),
+    );
+}
+
 test "standard adapter forwards loopback HTTP and performs full-file I/O atomically" {
     sync_transport_fixture_reset();
     var tmp = std.testing.tmpDir(.{ .iterate = true });

@@ -187,11 +187,15 @@ fn parseMethod(method: []const u8) ?std.http.Method {
 }
 
 fn validateHeader(header: transport_mod.HttpHeader) !void {
-    if (header.name.len == 0 or
-        std.mem.indexOfScalar(u8, header.name, ':') != null or
-        std.mem.indexOfAny(u8, header.name, "\r\n") != null or
-        std.mem.indexOfAny(u8, header.value, "\r\n") != null)
-    {
+    if (header.name.len == 0) return error.InvalidHttpHeader;
+    for (header.name) |byte| {
+        if (!std.ascii.isAlphanumeric(byte) and
+            std.mem.indexOfScalar(u8, "!#$%&'*+-.^_`|~", byte) == null)
+        {
+            return error.InvalidHttpHeader;
+        }
+    }
+    if (std.mem.indexOfAny(u8, header.value, "\r\n") != null) {
         return error.InvalidHttpHeader;
     }
 }
@@ -222,4 +226,32 @@ test "method parsing and URL joining are deterministic" {
     const joined = try joinUrl(std.testing.allocator, "https://example.invalid/", "/sync");
     defer std.testing.allocator.free(joined);
     try std.testing.expectEqualStrings("https://example.invalid/sync", joined);
+}
+
+test "header validation accepts RFC token names and rejects invalid bytes" {
+    try validateHeader(.{
+        .name = "x-!#$%&'*+.^_`|~",
+        .value = "visible value\twith tab",
+    });
+
+    const invalid_names = [_][]const u8{
+        "",
+        "bad name",
+        "bad:name",
+        "bad\tname",
+        "bad\rname",
+        "bad\nname",
+        "bad\x00name",
+        "bad\x80name",
+    };
+    for (invalid_names) |name| {
+        try std.testing.expectError(
+            error.InvalidHttpHeader,
+            validateHeader(.{ .name = name, .value = "value" }),
+        );
+    }
+    try std.testing.expectError(
+        error.InvalidHttpHeader,
+        validateHeader(.{ .name = "x-valid", .value = "line\r\ninjection" }),
+    );
 }

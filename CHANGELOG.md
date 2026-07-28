@@ -6,6 +6,13 @@ is pre-1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Scoped sync-operation recovery state to each heap-stable `SyncDatabase`
+  instead of a process-global registry and spinlock.
+- Restricted standard-transport HTTP field names to RFC token characters and
+  clarified that plaintext HTTP requires explicit `allow_http` opt-in.
+
 ## [0.1.0] - 2026-07-27
 
 ### Added

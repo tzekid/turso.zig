@@ -179,7 +179,8 @@ zig build example-sync -Dsync=true
 
 `token.txt` contains the token only; the example constructs the `Bearer` header
 and clears its buffers. Pass `-` only for an unauthenticated loopback server.
-The standard transport requires HTTPS except for parsed loopback URLs, does not
+The standard transport requires HTTPS unless `allow_http` is deliberately
+enabled; the example enables it only after parsing a loopback URL. It does not
 follow redirects, redacts authorization failures, and confines file requests
 to normalized root-relative paths.
 
