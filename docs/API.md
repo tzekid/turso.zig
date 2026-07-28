@@ -4,7 +4,7 @@ This document describes the implemented blocking API. The raw pinned SDK Kit ABI
 
 ## Ownership model
 
-`Database`, `Connection`, `Statement`, `Rows`, `Transaction`, `OwnedValue`, and owned metadata values are move-only owners by convention. Zig assignment is a bitwise copy and cannot invoke a move constructor, so copying an owner and using both aliases is unsupported. When relocating an owner explicitly, assign it once and set the old variable to `undefined`.
+`Database`, `Connection`, `Statement`, `Rows`, `Transaction`, `BatchReport`, `OwnedValue`, and owned metadata values are move-only owners by convention. Zig assignment is a bitwise copy and cannot invoke a move constructor, so copying an owner and using both aliases is unsupported. When relocating an owner explicitly, assign it once and set the old variable to `undefined`.
 
 The wrapper keeps Database, Connection, and prepared-statement control state on the heap. Relocating a Database while its Connections are alive, a Connection while a Statement/Transaction is alive, or a Statement while Rows leases it does not invalidate the child. Destruction order still matters:
 
@@ -84,7 +84,7 @@ the same tuple, sparse positional, and named-struct forms as
 `Statement.bindParams`. `Transaction` exposes matching methods. They prepare
 one statement, bind with checked conversion, and execute or transfer its Rows
 owner without retries. Existing `exec`/`query` calls taking `[]const Value`
-remain source-compatible; parameterized batches are intentionally absent.
+remain source-compatible.
 
 ## Transactions and batches
 
@@ -92,7 +92,46 @@ remain source-compatible; parameterized batches are intentionally absent.
 
 Commit or rollback errors preserve active transaction ownership so cleanup can be retried. `Transaction.deinit` rolls back best-effort; if rollback leaves native state uncertain, the Connection is poisoned and permits only deinitialization.
 
-`execBatch` validates the complete input as UTF-8 and rejects an interior NUL before executing the first statement. It checks parser tail progress and returns the checked sum of rows changed. Earlier statements are not implicitly rolled back; wrap the batch in a Transaction for atomicity.
+`execBatch` is the lightweight parameterless SQL-script API. It validates the
+complete input as UTF-8 and rejects an interior NUL before executing the first
+statement. It checks parser tail progress and returns the checked sum of rows
+changed. Earlier statements are not implicitly rolled back; wrap the script in
+a Transaction for atomicity.
+
+`executeBatch` is the structured counterpart. Each `BatchItem` contains one
+statement and `.none`, `.positional`, or explicitly `.named` runtime
+parameters. All SQL strings, TEXT values, and named descriptors are validated
+before the first statement executes. A parameter-count or SQL/name mismatch
+that depends on native preparation fails before that affected statement is
+executed.
+
+`Connection.executeBatch` requires an explicit transaction policy:
+
+- `.none` executes sequentially and retains normal effects from completed
+  entries if a later entry fails;
+- `.deferred`, `.immediate`, `.exclusive`, or `.concurrent` starts a
+  wrapper-owned transaction, commits only after all entries complete, and
+  rolls back on execution, materialization, or commit failure;
+- rollback failure returns the rollback error, records `.rollback_failed`, and
+  poisons the Connection so only deinit remains valid.
+
+`Transaction.executeBatch` already runs in its caller-owned transaction. It
+accepts only `.transaction = .none`, leaves that transaction active on success
+or failure, and rejects nested transaction modes.
+
+The caller initializes `BatchReport` with `.{};` and always calls its
+idempotent `deinit`. Errors are returned normally, while `completed`,
+`failed_index`, `entries()`, and `transaction_outcome` retain exact progress.
+Each completed entry reports rows changed and the connection's last insert row
+ID.
+
+`.changes_only` drains query rows without allocating them.
+`.materialize_rows` copies column metadata and typed rows into report-owned
+storage. Its caller-selected limits are aggregate across the report:
+`max_rows` counts rows, `max_items` counts column descriptors plus row values,
+and `max_bytes` counts owned metadata, TEXT, and BLOB bytes. Limit exhaustion
+returns `error.MaterializationLimitExceeded`; partial allocations are cleaned
+before the report is returned. No batch path retries automatically.
 
 ## Diagnostics and setup
 

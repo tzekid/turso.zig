@@ -20,6 +20,7 @@ extern fn statement_io_fixture_reset(
     fail_run_io_call: u32,
 ) void;
 extern fn statement_io_fixture_fail_reset_call(call: u32) void;
+extern fn statement_io_fixture_fail_rollback(fail: bool) void;
 extern fn statement_io_fixture_connection() *anyopaque;
 extern fn statement_io_fixture_stats() FixtureStats;
 
@@ -189,6 +190,51 @@ test "statement-state allocation failure releases the native handle" {
     try std.testing.expectEqual(@as(u32, 1), stats.connection_deinit_calls);
     try std.testing.expectEqual(@as(usize, 0), owners.load(.acquire));
     try std.testing.expect(allocator_probe.has_induced_failure);
+}
+
+test "structured batch rollback failure poisons the connection" {
+    statement_io_fixture_reset(0, 0, 0, 0);
+    statement_io_fixture_fail_rollback(true);
+    var owners = std.atomic.Value(usize).init(1);
+    var connection = try connection_mod.init(
+        std.testing.allocator,
+        @ptrCast(statement_io_fixture_connection()),
+        &owners,
+    );
+    var diagnostics = connection_mod.Diagnostics{};
+    var report: connection_mod.BatchReport = .{};
+    defer report.deinit();
+
+    try std.testing.expectError(
+        error.Io,
+        connection.executeBatch(
+            std.testing.allocator,
+            &.{.{ .sql = "fixture batch failure" }},
+            .{
+                .diagnostics = &diagnostics,
+                .transaction = .deferred,
+            },
+            &report,
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 0), report.completed);
+    try std.testing.expectEqual(@as(?usize, 0), report.failed_index);
+    try std.testing.expectEqual(.rollback_failed, report.transaction_outcome);
+    try std.testing.expectEqualStrings("fixture rollback failure", diagnostics.text());
+    try std.testing.expectError(
+        error.InvalidState,
+        connection.exec("fixture poisoned", &.{}, .{}),
+    );
+    try std.testing.expectError(error.InvalidState, connection.isAutocommit());
+
+    connection.deinit();
+    const stats = statement_io_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 3), stats.prepare_calls);
+    try std.testing.expectEqual(@as(u32, 3), stats.execute_calls);
+    try std.testing.expectEqual(@as(u32, 3), stats.statement_deinit_calls);
+    try std.testing.expectEqual(@as(u32, 1), stats.connection_deinit_calls);
+    try std.testing.expectEqual(@as(u32, 1), stats.string_deinit_calls);
+    try std.testing.expectEqual(@as(usize, 0), owners.load(.acquire));
 }
 
 fn initInline(owners: *std.atomic.Value(usize)) !connection_mod.Connection {

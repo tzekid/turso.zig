@@ -53,7 +53,7 @@ pub fn main() !void {
 | Area | Support |
 | --- | --- |
 | Database access | Memory and file databases, source or system SDK Kit, static or dynamic linkage |
-| Queries | Reusable prepared and one-shot statements, positional/named parameters, batches, typed row decoding |
+| Queries | Reusable prepared and one-shot statements, positional/named parameters, structured batches, typed row decoding |
 | Values | Null, integer, real, UTF-8 text, arbitrary blobs, borrowed and owned representations |
 | Transactions | Deferred, immediate, exclusive, and concurrent modes with explicit commit/rollback |
 | Extensions | Managed scalar/aggregate functions, collations, and opt-in extension loading |
@@ -157,6 +157,27 @@ idle on one Connection, while exactly one execution or Rows lease is active.
 `Statement.query` and `queryParams` return a temporary Rows lease; `finish`,
 `cancel`, or `deinit` resets that execution so the Statement can be rebound.
 The older `intoRows` path remains explicitly consuming.
+
+## Structured batches
+
+`Connection.executeBatch` executes a slice of `BatchItem` values with
+positional, explicitly named, or no parameters. Its transaction policy is
+deliberate: `.none` preserves successful earlier entries, while `.deferred`,
+`.immediate`, `.exclusive`, or `.concurrent` commits all entries together and
+rolls back on failure. There are no implicit retries.
+
+Errors remain ordinary Zig errors. The caller-owned `BatchReport` records every
+completed entry, the failed input index, and whether a wrapper-owned
+transaction committed, rolled back, or failed to roll back. Query results are
+discarded by default. Opting into `.materialize_rows` requires aggregate
+`max_rows`, `max_items`, and `max_bytes` limits; returned metadata, text, blobs,
+and rows remain owned by the report until its idempotent `deinit`.
+
+`Transaction.executeBatch` uses the caller's already-active transaction and
+rejects a nested batch transaction mode. The older `execBatch(sql)` remains
+the lightweight parameterless SQL-script API. See
+[examples/batch.zig](examples/batch.zig) for atomic, non-atomic, and bounded
+materialization paths.
 
 See [docs/API.md](docs/API.md) and [docs/CALLBACKS.md](docs/CALLBACKS.md) for
 the complete lifecycle contract. Generated API documentation is available with

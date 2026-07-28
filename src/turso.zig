@@ -16,6 +16,7 @@ const statement_mod = @import("statement.zig");
 const row_mod = @import("row.zig");
 const runtime_mod = @import("runtime.zig");
 const functions_mod = @import("functions.zig");
+const batch_mod = @import("batch.zig");
 
 pub const Error = status_mod.Error;
 pub const Status = status_mod.Status;
@@ -54,6 +55,18 @@ pub const DecodeOptions = row_mod.DecodeOptions;
 pub const Transaction = connection_mod.Connection.Transaction;
 pub const TransactionMode = connection_mod.Connection.TransactionMode;
 pub const TransactionState = connection_mod.TransactionState;
+
+pub const BatchError = batch_mod.Error;
+pub const BatchParameters = batch_mod.BatchParameters;
+pub const BatchItem = batch_mod.BatchItem;
+pub const BatchTransaction = batch_mod.BatchTransaction;
+pub const MaterializeOptions = batch_mod.MaterializeOptions;
+pub const BatchRowPolicy = batch_mod.BatchRowPolicy;
+pub const BatchOptions = batch_mod.BatchOptions;
+pub const BatchTransactionOutcome = batch_mod.BatchTransactionOutcome;
+pub const BatchRow = batch_mod.BatchRow;
+pub const BatchEntryResult = batch_mod.BatchEntryResult;
+pub const BatchReport = batch_mod.BatchReport;
 
 pub const CallbackError = functions_mod.CallbackError;
 pub const CollationOrder = functions_mod.CollationOrder;

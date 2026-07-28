@@ -167,6 +167,19 @@ pub fn build(b: *std.Build) void {
     const prepared_example_step = b.step("example-prepared", "Build and run the prepared statement reuse example");
     prepared_example_step.dependOn(&run_prepared_example.step);
 
+    const batch_example = b.addExecutable(.{
+        .name = "turso-batch",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/batch.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "turso", .module = turso_module }},
+        }),
+    });
+    const run_batch_example = b.addRunArtifact(batch_example);
+    const batch_example_step = b.step("example-batch", "Build and run the structured batch example");
+    batch_example_step.dependOn(&run_batch_example.step);
+
     const transaction_example = b.addExecutable(.{
         .name = "turso-transaction",
         .root_module = b.createModule(.{
@@ -271,6 +284,7 @@ pub fn build(b: *std.Build) void {
     const examples_step = b.step("examples", "Build and run all public examples");
     examples_step.dependOn(&run_basic_example.step);
     examples_step.dependOn(&run_prepared_example.step);
+    examples_step.dependOn(&run_batch_example.step);
     examples_step.dependOn(&run_transaction_example.step);
     examples_step.dependOn(&run_functions_example.step);
     examples_step.dependOn(&install_encryption_example.step);
@@ -278,7 +292,7 @@ pub fn build(b: *std.Build) void {
     if (sync) examples_step.dependOn(sync_example_step);
 
     const memcheck_smokes_step = b.step("build-memcheck-smokes", "Install representative executables for Valgrind");
-    inline for (.{ basic_example, prepared_example, transaction_example, functions_example, ergonomic_example }) |artifact| {
+    inline for (.{ basic_example, prepared_example, batch_example, transaction_example, functions_example, ergonomic_example }) |artifact| {
         const install_artifact = b.addInstallArtifact(artifact, .{});
         memcheck_smokes_step.dependOn(&install_artifact.step);
     }
@@ -612,6 +626,9 @@ pub fn build(b: *std.Build) void {
     const transaction_tests = addTestRun(b, "turso-transaction-tests", b.path("tests/transactions.zig"), target, optimize, &.{
         .{ .name = "turso", .module = turso_module },
     });
+    const batch_tests = addTestRun(b, "turso-batch-tests", b.path("tests/batches.zig"), target, optimize, &.{
+        .{ .name = "turso", .module = turso_module },
+    });
     const security_tests = if (encryption)
         addTestRun(b, "turso-security-tests", b.path("tests/security.zig"), target, optimize, &.{
             .{ .name = "turso", .module = turso_module },
@@ -655,12 +672,15 @@ pub fn build(b: *std.Build) void {
         security_step.dependOn(&disabled.step);
     }
     const safe_step = b.step("test-safe", "Run safe database, statement, and row integration tests");
+    const batch_step = b.step("test-batches", "Run structured batch integration tests");
+    batch_step.dependOn(&batch_tests.step);
     safe_step.dependOn(&database_tests.step);
     safe_step.dependOn(&statement_tests.step);
     safe_step.dependOn(&runtime_tests.step);
     safe_step.dependOn(&runtime_unit_tests.step);
     safe_step.dependOn(&ergonomics_tests.step);
     safe_step.dependOn(&transaction_tests.step);
+    safe_step.dependOn(&batch_tests.step);
     if (security_tests) |run| safe_step.dependOn(&run.step);
     safe_step.dependOn(&function_tests.step);
     safe_step.dependOn(&failure_tests.step);
@@ -681,6 +701,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&runtime_unit_tests.step);
     test_step.dependOn(&ergonomics_tests.step);
     test_step.dependOn(&transaction_tests.step);
+    test_step.dependOn(&batch_tests.step);
     if (security_tests) |run| test_step.dependOn(&run.step);
     test_step.dependOn(&function_tests.step);
     test_step.dependOn(&failure_tests.step);

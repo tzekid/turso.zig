@@ -6,6 +6,12 @@ is pre-1.0.
 
 ## [Unreleased]
 
+### Added
+
+- Added structured parameterized batches with explicit atomic/non-atomic
+  transaction policy, partial failure reports, per-entry change/row-ID
+  metadata, and bounded allocator-owned row materialization.
+
 ### Changed
 
 - Made prepared SELECT statements reusable through `Statement.query` and

@@ -7,12 +7,17 @@ const cstring = @import("cstring.zig");
 const ffi = @import("ffi.zig");
 const statement_mod = @import("statement.zig");
 const functions_mod = @import("functions.zig");
+const batch_mod = @import("batch.zig");
 
 pub const Diagnostics = diagnostics_mod.Diagnostics;
 pub const Value = value_mod.Value;
 pub const Statement = statement_mod.Statement;
 pub const Rows = statement_mod.Rows;
 pub const StatementIoPolicy = statement_mod.IoPolicy;
+pub const BatchError = batch_mod.Error;
+pub const BatchItem = batch_mod.BatchItem;
+pub const BatchOptions = batch_mod.BatchOptions;
+pub const BatchReport = batch_mod.BatchReport;
 
 const TransactionModeImpl = enum {
     deferred,
@@ -112,6 +117,20 @@ pub const Connection = struct {
     pub fn execBatch(self: *Connection, sql: []const u8, options: OperationOptions) status_mod.Error!u64 {
         const control = try self.requireControl(options.diagnostics);
         return execBatchControl(control, sql, options, false, .enabled);
+    }
+
+    /// Execute typed entries sequentially with explicit row and transaction
+    /// policies. `report` is reset first and retains completed entries plus the
+    /// failed index when an error is returned.
+    pub fn executeBatch(
+        self: *Connection,
+        allocator: std.mem.Allocator,
+        items: []const BatchItem,
+        options: BatchOptions,
+        report: *BatchReport,
+    ) BatchError!void {
+        const control = try self.requireControl(options.diagnostics);
+        return executeBatchFromConnection(self, control, allocator, items, options, report);
     }
 
     pub fn query(
@@ -436,6 +455,40 @@ pub const TransactionHandle = struct {
         return execBatchControl(self.control, sql, options, true, .disabled);
     }
 
+    /// Execute typed entries inside this caller-owned transaction. The
+    /// transaction remains active on success or failure; nested transaction
+    /// modes in `options` are rejected.
+    pub fn executeBatch(
+        self: *TransactionHandle,
+        allocator: std.mem.Allocator,
+        items: []const BatchItem,
+        options: BatchOptions,
+        report: *BatchReport,
+    ) BatchError!void {
+        report.prepareForExecution(allocator, items.len) catch |err| {
+            ffi.setWrapperError(options.diagnostics, "batch report allocation failed before execution");
+            return err;
+        };
+        try self.requireActive(options.diagnostics);
+        report.transaction_outcome = .existing_transaction;
+        if (options.transaction != .none) {
+            ffi.setWrapperError(
+                options.diagnostics,
+                "a Transaction batch already uses its caller-owned transaction; nested batch modes are invalid",
+            );
+            return error.InvalidState;
+        }
+        try batch_mod.validateItems(items, options.diagnostics, report);
+        return batch_mod.executeItems(
+            self,
+            allocator,
+            items,
+            options.row_policy,
+            options.diagnostics,
+            report,
+        );
+    }
+
     pub fn query(
         self: *TransactionHandle,
         sql: []const u8,
@@ -536,6 +589,91 @@ pub const TransactionHandle = struct {
         _ = try requireAvailable(self.control, diagnostics, true);
     }
 };
+
+fn executeBatchFromConnection(
+    connection_owner: *Connection,
+    control: *Control,
+    allocator: std.mem.Allocator,
+    items: []const BatchItem,
+    options: BatchOptions,
+    report: *BatchReport,
+) BatchError!void {
+    report.prepareForExecution(allocator, items.len) catch |err| {
+        ffi.setWrapperError(options.diagnostics, "batch report allocation failed before execution");
+        return err;
+    };
+    _ = try requireAvailable(control, options.diagnostics, false);
+    try batch_mod.validateItems(items, options.diagnostics, report);
+
+    if (options.transaction == .none) {
+        return batch_mod.executeItems(
+            connection_owner,
+            allocator,
+            items,
+            options.row_policy,
+            options.diagnostics,
+            report,
+        );
+    }
+
+    var transaction = connection_owner.begin(
+        batchTransactionMode(options.transaction),
+        .{ .diagnostics = options.diagnostics },
+    ) catch |err| {
+        report.transaction_outcome = .begin_failed;
+        return err;
+    };
+    batch_mod.executeItems(
+        &transaction,
+        allocator,
+        items,
+        options.row_policy,
+        options.diagnostics,
+        report,
+    ) catch |batch_error| {
+        const saved_diagnostics = if (options.diagnostics) |detail| detail.* else null;
+        rollbackStructuredBatch(&transaction, report, options.diagnostics) catch |rollback_error| {
+            return rollback_error;
+        };
+        if (saved_diagnostics) |saved| options.diagnostics.?.* = saved;
+        return batch_error;
+    };
+
+    transaction.commit(options.diagnostics) catch |commit_error| {
+        const saved_diagnostics = if (options.diagnostics) |detail| detail.* else null;
+        rollbackStructuredBatch(&transaction, report, options.diagnostics) catch |rollback_error| {
+            return rollback_error;
+        };
+        if (saved_diagnostics) |saved| options.diagnostics.?.* = saved;
+        return commit_error;
+    };
+    report.transaction_outcome = .committed;
+}
+
+fn rollbackStructuredBatch(
+    transaction: *TransactionHandle,
+    report: *BatchReport,
+    diagnostics: ?*Diagnostics,
+) BatchError!void {
+    transaction.rollback(diagnostics) catch |err| {
+        transaction.control.transaction_active = false;
+        transaction.control.poisoned = true;
+        transaction.state = .failed;
+        report.transaction_outcome = .rollback_failed;
+        return err;
+    };
+    report.transaction_outcome = .rolled_back;
+}
+
+fn batchTransactionMode(transaction: batch_mod.BatchTransaction) TransactionModeImpl {
+    return switch (transaction) {
+        .none => unreachable,
+        .deferred => .deferred,
+        .immediate => .immediate,
+        .exclusive => .exclusive,
+        .concurrent => .concurrent,
+    };
+}
 
 fn prepareControl(
     control: *Control,

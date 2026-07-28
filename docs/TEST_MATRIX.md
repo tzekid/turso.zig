@@ -12,6 +12,7 @@ and clean downstream consumption.
 | Pure Zig | `zig build test-pure` | Status, diagnostics, values, config, C-string, and statement-I/O logic |
 | Raw ABI | `zig build test-abi` | Header layout/signatures, status values, runtime version, native `SELECT 1`, error ownership |
 | Safe API | `zig build test-safe` | Database, statements, rows, decode, transactions, callbacks, failures, SQL corpus |
+| Structured batches | `zig build test-batches` | Parameters, partial reports, bounded ownership, transaction modes, allocator and rollback failure |
 | Aggregate | `zig build test` | All of the above plus durability, 32-bit compile safety, and short soak |
 | Examples | `zig build examples` | Public local examples compile and run; secret-bearing examples compile only |
 | API docs | `zig build docs` | Both public module surfaces are documentation-clean |
@@ -80,8 +81,9 @@ workflow action is pinned to an exact commit.
 Tests cover partial construction, allocator failure, native error strings,
 idempotent cleanup on one owner variable, parent/child teardown, stale row
 borrows, reusable prepared-query leases, multiple idle statements with one
-active execution, reset failure, transaction poisoning, callback context and
-aggregate-state destruction, and sync transfer/consume rules.
+active execution, reset failure, structured-batch partial progress and bounded
+materialization, transaction and rollback-failure poisoning, callback context
+and aggregate-state destruction, and sync transfer/consume rules.
 
 The safe wrapper never races a handle in ways forbidden by the C header. One
 `Database` may fan out independent connections. A Connection may retain

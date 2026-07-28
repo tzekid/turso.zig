@@ -2,11 +2,15 @@ const std = @import("std");
 
 pub const Error = std.mem.Allocator.Error || error{ InteriorNul, InvalidUtf8 };
 
-pub fn dupe(allocator: std.mem.Allocator, bytes: []const u8) Error![:0]u8 {
+pub fn validate(bytes: []const u8) error{ InteriorNul, InvalidUtf8 }!void {
     if (!std.unicode.utf8ValidateSlice(bytes)) return error.InvalidUtf8;
     if (std.mem.indexOfScalar(u8, bytes, 0) != null) {
         return error.InteriorNul;
     }
+}
+
+pub fn dupe(allocator: std.mem.Allocator, bytes: []const u8) Error![:0]u8 {
+    try validate(bytes);
     return allocator.dupeZ(u8, bytes);
 }
 

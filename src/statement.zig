@@ -592,6 +592,16 @@ pub const Rows = struct {
         return try row.decode(T, allocator, options);
     }
 
+    /// Return the native modification count after iteration reached DONE.
+    /// Call this before `finish`, which releases the Rows lease.
+    pub fn rowsChanged(self: *Rows) status_mod.Error!u64 {
+        const control = try self.requireControl(null);
+        if (control.state != .done) return error.InvalidState;
+        const count = raw.turso_statement_n_change(control.handle);
+        if (count < 0) return error.InvalidState;
+        return std.math.cast(u64, count) orelse error.IntegerOverflow;
+    }
+
     /// Drain to DONE, reset, and release this execution. Prepared statements
     /// become ready for another bind/query cycle.
     pub fn finish(self: *Rows, diagnostics: ?*Diagnostics) status_mod.Error!void {
