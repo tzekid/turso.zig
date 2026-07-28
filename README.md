@@ -82,11 +82,21 @@ package extraction tests, and a real two-client sync round trip through a local
 ## Install
 
 The source backend requires Zig 0.16.0, Rust/Cargo 1.88, and a C toolchain.
-Add the tagged package:
+The latest tagged package is v0.1.0:
 
 ```sh
-zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.2.0
+zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
 ```
+
+The `master` branch contains unreleased 0.2.0 development. To evaluate that
+work:
+
+```sh
+zig fetch --save=turso git+https://github.com/tzekid/turso.zig#master
+```
+
+Retain the commit resolved into `build.zig.zon` rather than treating the moving
+branch name as a reproducible dependency.
 
 Then expose its module from your `build.zig`:
 
@@ -151,11 +161,12 @@ install names.
 
 ### Release archives
 
-Building the pinned SDK Kit from source is the canonical fallback. Release
-archives are an optional way to supply a target-native library through
+No release archives are currently published. Building the pinned SDK Kit from
+source is therefore the supported installation path. When a GitHub Release is
+published, its optional archives can supply a target-native library through
 `native = "system"`; the package does not download or select one automatically.
 
-| Need | Archive name |
+| Planned archive | Filename pattern |
 | --- | --- |
 | Base SDK Kit, build locally | `turso-zig-<version>-source.tar.gz` |
 | Sync SDK Kit, build locally | `turso-zig-<version>-source-sync.tar.gz` |
@@ -164,10 +175,10 @@ archives are an optional way to supply a target-native library through
 
 Choose the exact Rust target triple for the machine, then choose `static` or
 `dynamic` and base or sync. Point `native-path` at the extracted prefix and
-pass the matching `linkage` and `sync` options. Every archive has a checksum
-sidecar and contains a provenance manifest, wrapper and upstream notices, the
-appropriate header set, and exactly one SDK Kit variant. Current prebuilt
-targets are:
+pass the matching `linkage` and `sync` options. Each published archive will
+have a checksum sidecar and contain a provenance manifest, wrapper and upstream
+notices, the appropriate header set, and exactly one SDK Kit variant. The
+current development tree has target-native CI packaging evidence for:
 
 | Platform | Target triples |
 | --- | --- |

@@ -6,8 +6,6 @@ is pre-1.0.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-07-28
-
 ### Added
 
 - Added structured parameterized batches with explicit atomic/non-atomic
@@ -79,6 +77,5 @@ is pre-1.0.
 - Extension loading disabled by default, credential redaction, strict sync path
   validation, and explicit borrowed-value lifetime checks.
 
-[Unreleased]: https://github.com/tzekid/turso.zig/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/tzekid/turso.zig/compare/v0.1.0...v0.2.0
+[Unreleased]: https://github.com/tzekid/turso.zig/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/tzekid/turso.zig/releases/tag/v0.1.0

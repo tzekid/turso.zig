@@ -8,7 +8,7 @@ consumers have passed the target-native CI matrix.
 
 | Item | Value |
 | --- | --- |
-| turso.zig | `0.2.0` |
+| turso.zig development version | `0.2.0` |
 | Zig | `0.16.0` |
 | Rust | `1.88` |
 | Musl package environment | Alpine `3.22`, musl `1.2.5`, image index `sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce` |
@@ -20,6 +20,10 @@ consumers have passed the target-native CI matrix.
 | `turso.h` body SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
 | `turso_sync.h` body SHA-256 | `38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35` |
 | Reproducible source epoch | `1784727869` |
+
+Version 0.2.0 is currently unreleased. The latest tag is `v0.1.0`; this table
+describes inputs being prepared for a future release, not an existing tag or
+set of downloadable assets.
 
 The tag object and peeled commit are intentionally recorded separately. The
 vendored headers carry wrapper attribution above the upstream include guards,
@@ -153,7 +157,7 @@ consumer. Each native archive contains the Zig source, the matching header set,
 one selected SDK Kit runtime/static library, a Windows import library when
 needed, both projects' notices, `manifest.json`, and `checksums.sha256`.
 
-The current release collector requires exactly 30 archives and 30 checksum
+The release collector requires exactly 30 archives and 30 checksum
 sidecars: two source variants plus base/sync static/dynamic archives for seven
 target-native platforms.
 
