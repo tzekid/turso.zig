@@ -333,9 +333,11 @@ The Zig `sync.run` driver drains each round through a borrowed caller-owned
 transport and guarantees that a checked-out item is completed or poisoned and
 then deinited before stepping callbacks. `StandardTransport` borrows the
 caller's allocator, `std.Io`, `std.http.Client`, and filesystem root. It requires
-HTTPS by default, does not follow redirects, validates injected headers, and
-uses fixed poison categories so request headers, authorization values, response
-bodies, and file paths do not enter diagnostics.
+HTTPS by default, does not follow redirects, validates static and per-request
+provider authorization through the same header boundary, and uses fixed poison
+categories so request headers, authorization values, provider errors, response
+bodies, and file paths do not enter diagnostics. Provider results are
+synchronous caller-owned borrows; no token storage is retained.
 
 Standard full-file requests are confined lexically to normalized, non-empty,
 root-relative `/` paths. Absolute paths, dot/parent/empty components,

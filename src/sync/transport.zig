@@ -25,6 +25,19 @@ pub const HttpHeader = struct {
     value: []const u8,
 };
 
+/// Resolves one caller-owned authorization header for the current HTTP item.
+///
+/// The callback is invoked synchronously and exactly once immediately before
+/// the transport request. A returned header and all of its bytes are borrowed
+/// only until that request method returns. Returning null deliberately
+/// preserves the native request headers without wrapper injection. One `run`
+/// invokes it serially; callers must synchronize a context shared across runs
+/// and must not re-enter the same database or operation from the callback.
+pub const AuthorizationProvider = struct {
+    context: ?*anyopaque = null,
+    resolve: *const fn (context: ?*anyopaque) anyerror!?HttpHeader,
+};
+
 /// Borrowed request data. Every slice expires when the current transport call
 /// returns. `authorization` is explicit so adapters can give it stricter
 /// redirect handling and must never include it in errors or diagnostics.
@@ -38,9 +51,16 @@ pub const HttpRequest = struct {
 };
 
 pub const Options = struct {
-    /// Optional caller-owned authorization header injected in addition to
-    /// every native request header. Its bytes are never copied to diagnostics.
+    /// Optional caller-owned authorization header supplied separately from
+    /// the native request headers. Its bytes are never copied to diagnostics.
+    ///
+    /// Retained for source-compatible static credentials. When
+    /// `authorization_provider` is set, its per-request result is authoritative
+    /// and this field is ignored.
     authorization: ?HttpHeader = null,
+    /// Optional caller-owned resolver invoked for every HTTP item. It is never
+    /// invoked for file I/O and no returned bytes are retained.
+    authorization_provider: ?AuthorizationProvider = null,
     diagnostics: ?*Diagnostics = null,
 };
 
@@ -78,6 +98,7 @@ const poison_http = "sync transport HTTP failure";
 const poison_full_read = "sync transport full-read failure";
 const poison_full_write = "sync transport full-write failure";
 const poison_request = "sync transport request failure";
+const poison_authorization = "sync authorization provider failure";
 
 /// Drive `operation` to completion, drain every queued I/O item on each round,
 /// extract its typed result, and deinitialize the native operation.
@@ -161,7 +182,9 @@ fn drainIo(
         };
 
         dispatchItem(allocator, &item, kind, transport, options) catch |transport_err| {
-            const category = switch (kind) {
+            const category = if (transport_err == error.AuthorizationProviderFailed)
+                poison_authorization
+            else switch (kind) {
                 .http => poison_http,
                 .full_read => poison_full_read,
                 .full_write => poison_full_write,
@@ -208,6 +231,12 @@ fn dispatchItem(
                     .value = native_header.value,
                 };
             }
+            const authorization = resolveAuthorization(options) catch {
+                if (options.diagnostics) |diagnostics| {
+                    diagnostics.setWrapperError(poison_authorization);
+                }
+                return error.AuthorizationProviderFailed;
+            };
 
             var writer = ResponseWriter{ .buffer = .{
                 .item = item,
@@ -219,7 +248,7 @@ fn dispatchItem(
                 .path = native_request.path,
                 .body = native_request.body,
                 .headers = headers,
-                .authorization = options.authorization,
+                .authorization = authorization,
             }, &writer);
             if (!item.status_set) return error.MissingHttpStatus;
             try item.done(options.diagnostics);
@@ -239,6 +268,12 @@ fn dispatchItem(
             try item.done(options.diagnostics);
         },
     }
+}
+
+fn resolveAuthorization(options: Options) !?HttpHeader {
+    const provider = options.authorization_provider orelse
+        return options.authorization;
+    return provider.resolve(provider.context);
 }
 
 fn cleanupResult(comptime T: type, result: *T) void {

@@ -34,13 +34,16 @@ const FakeTransport = struct {
     fail_http: bool = false,
     invalid_status: bool = false,
     fail_native_poison: bool = false,
-    expected_authorization: []const u8 = "Bearer driver-secret",
+    expected_authorization: ?[]const u8 = "Bearer driver-secret",
+    expected_authorizations: ?[2]?[]const u8 = null,
 
     pub fn request(
         self: *FakeTransport,
         request_data: sync.TransportHttpRequest,
         writer: *sync.ResponseWriter,
     ) !void {
+        const call = self.request_calls;
+        self.request_calls += 1;
         try std.testing.expectEqual(@as(usize, 4), request_data.headers.len);
         try std.testing.expectEqualStrings("x-native", request_data.headers[0].name);
         try std.testing.expectEqualStrings("native-value", request_data.headers[0].value);
@@ -48,14 +51,17 @@ const FakeTransport = struct {
         try std.testing.expectEqualStrings("Bearer stale-upper", request_data.headers[2].value);
         try std.testing.expectEqualStrings("aUtHoRiZaTiOn", request_data.headers[3].name);
         try std.testing.expectEqualStrings("Bearer stale-mixed", request_data.headers[3].value);
-        try std.testing.expectEqualStrings("authorization", request_data.authorization.?.name);
-        try std.testing.expectEqualStrings(
-            self.expected_authorization,
-            request_data.authorization.?.value,
-        );
+        const expected_authorization = if (self.expected_authorizations) |expected|
+            expected[call]
+        else
+            self.expected_authorization;
+        if (expected_authorization) |expected| {
+            try std.testing.expectEqualStrings("authorization", request_data.authorization.?.name);
+            try std.testing.expectEqualStrings(expected, request_data.authorization.?.value);
+        } else {
+            try std.testing.expect(request_data.authorization == null);
+        }
 
-        const call = self.request_calls;
-        self.request_calls += 1;
         if (self.fail_native_poison and call == 0) {
             const diagnostics = writer.buffer.diagnostics orelse
                 return error.MissingPoisonFailureDiagnostics;
@@ -112,6 +118,29 @@ const FakeTransport = struct {
     }
 };
 
+const AuthorizationSequence = struct {
+    headers: [2]?sync.TransportHeader,
+    calls: usize = 0,
+    fail_on_call: ?usize = null,
+
+    fn provider(self: *AuthorizationSequence) sync.AuthorizationProvider {
+        return .{
+            .context = self,
+            .resolve = resolve,
+        };
+    }
+
+    fn resolve(context: ?*anyopaque) anyerror!?sync.TransportHeader {
+        const self: *AuthorizationSequence = @ptrCast(@alignCast(context orelse
+            return error.MissingAuthorizationContext));
+        const call = self.calls;
+        self.calls += 1;
+        if (self.fail_on_call == call) return error.SecretBearingProviderFailure;
+        if (call >= self.headers.len) return error.AuthorizationProviderExhausted;
+        return self.headers[call];
+    }
+};
+
 test "driver drains every kind across rounds and returns copied typed stats" {
     sync_transport_fixture_reset();
     var database = try openDatabase(null);
@@ -149,6 +178,85 @@ test "driver drains every kind across rounds and returns copied typed stats" {
     try std.testing.expectEqual(@as(u32, 0), fixture.poison_calls);
     // Two HTTP chunks + one HTTP chunk + two full-read chunks.
     try std.testing.expectEqual(@as(u32, 5), fixture.buffer_calls);
+    try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+}
+
+test "authorization provider is resolved once per HTTP item and observes rotation" {
+    sync_transport_fixture_reset();
+    var database = try openDatabase(null);
+    var operation = try database.stats(null);
+    var fake = FakeTransport{
+        .expected_authorizations = .{
+            "Bearer request-one",
+            "Bearer request-two",
+        },
+    };
+    var authorization = AuthorizationSequence{ .headers = .{
+        .{ .name = "authorization", .value = "Bearer request-one" },
+        .{ .name = "authorization", .value = "Bearer request-two" },
+    } };
+    var stats = try sync.run(
+        sync.Stats,
+        std.testing.allocator,
+        &database,
+        &operation,
+        &fake,
+        .{ .authorization_provider = authorization.provider() },
+    );
+    defer stats.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), authorization.calls);
+    try std.testing.expectEqual(@as(usize, 2), fake.request_calls);
+    try std.testing.expectEqual(@as(usize, 2), fake.read_calls);
+    try std.testing.expectEqual(@as(usize, 1), fake.write_calls);
+    try closeAndDeinit(&database);
+}
+
+test "authorization provider failure is fixed, redacted, poisoned, and cleaned" {
+    sync_transport_fixture_reset();
+    var database = try openDatabase(null);
+    var operation = try database.create(null);
+    var fake = FakeTransport{};
+    var authorization = AuthorizationSequence{
+        .headers = .{
+            .{ .name = "authorization", .value = "Bearer must-not-leak" },
+            null,
+        },
+        .fail_on_call = 0,
+    };
+    var diagnostics = sync.Diagnostics{};
+
+    try std.testing.expectError(
+        error.Io,
+        sync.runVoid(
+            std.testing.allocator,
+            &database,
+            &operation,
+            &fake,
+            .{
+                .authorization_provider = authorization.provider(),
+                .diagnostics = &diagnostics,
+            },
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 1), authorization.calls);
+    try std.testing.expectEqual(@as(usize, 0), fake.request_calls);
+    try std.testing.expectEqualStrings(
+        "sync authorization provider failure",
+        diagnostics.text(),
+    );
+    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "must-not-leak") == null);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "SecretBearing") == null);
+    try std.testing.expectEqualStrings(
+        "sync authorization provider failure",
+        std.mem.span(sync_transport_fixture_poison()),
+    );
+    try closeAndDeinit(&database);
+
+    const fixture = sync_transport_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 3), fixture.items_created);
+    try std.testing.expectEqual(fixture.items_created, fixture.items_deinited);
+    try std.testing.expectEqual(@as(u32, 1), fixture.poison_calls);
     try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
 }
 
@@ -357,7 +465,59 @@ test "standard adapter rejects invalid HTTP headers before network I/O" {
     );
 }
 
-test "standard adapter forwards loopback HTTP and performs full-file I/O atomically" {
+test "standard adapter rejects an invalid provider header without leaking it" {
+    sync_transport_fixture_reset();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var client: std.http.Client = .{
+        .allocator = std.testing.allocator,
+        .io = std.testing.io,
+    };
+    defer client.deinit();
+    var adapter = sync.StandardTransport{
+        .allocator = std.testing.allocator,
+        .io = std.testing.io,
+        .client = &client,
+        .root_dir = tmp.dir,
+    };
+    var authorization = AuthorizationSequence{ .headers = .{
+        .{
+            .name = "authorization",
+            .value = "Bearer provider-secret\r\nx-injected: value",
+        },
+        null,
+    } };
+    var diagnostics = sync.Diagnostics{};
+    var database = try openDatabase(&diagnostics);
+    var operation = try database.create(&diagnostics);
+
+    try std.testing.expectError(
+        error.Io,
+        sync.runVoid(
+            std.testing.allocator,
+            &database,
+            &operation,
+            &adapter,
+            .{
+                .authorization_provider = authorization.provider(),
+                .diagnostics = &diagnostics,
+            },
+        ),
+    );
+    try std.testing.expectEqual(@as(usize, 1), authorization.calls);
+    try std.testing.expectEqualStrings("sync transport HTTP failure", diagnostics.text());
+    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "provider-secret") == null);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostics.text(), "x-injected") == null);
+    try closeAndDeinit(&database);
+
+    const fixture = sync_transport_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 3), fixture.items_created);
+    try std.testing.expectEqual(fixture.items_created, fixture.items_deinited);
+    try std.testing.expectEqual(@as(u32, 1), fixture.poison_calls);
+    try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+}
+
+test "standard adapter injects rotating authorization without following redirects" {
     sync_transport_fixture_reset();
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
@@ -391,7 +551,7 @@ test "standard adapter forwards loopback HTTP and performs full-file I/O atomica
     var server_context = ServerContext{
         .server = &server,
         .io = std.testing.io,
-        .authorization_mode = .replacement,
+        .authorization_mode = .replacement_sequence,
     };
     const server_thread = try std.Thread.spawn(.{}, serveRequests, .{&server_context});
 
@@ -410,23 +570,25 @@ test "standard adapter forwards loopback HTTP and performs full-file I/O atomica
 
     var database = try openDatabase(null);
     var operation = try database.create(null);
+    var authorization = AuthorizationSequence{ .headers = .{
+        .{ .name = "authorization", .value = "Bearer loopback-one" },
+        .{ .name = "authorization", .value = "Bearer loopback-two" },
+    } };
     try sync.run(
         void,
         std.testing.allocator,
         &database,
         &operation,
         &adapter,
-        .{ .authorization = .{
-            .name = "authorization",
-            .value = "Bearer loopback-secret",
-        } },
+        .{ .authorization_provider = authorization.provider() },
     );
     try closeAndDeinit(&database);
     server_thread.join();
     if (server_context.failure) |failure| return failure;
 
     const fixture = sync_transport_fixture_stats();
-    try std.testing.expectEqual(@as(c_int, 404), fixture.statuses[0]);
+    try std.testing.expectEqual(@as(usize, 2), authorization.calls);
+    try std.testing.expectEqual(@as(c_int, 302), fixture.statuses[0]);
     try std.testing.expectEqual(@as(c_int, 200), fixture.statuses[1]);
     try std.testing.expectEqual(@as(u32, 0), fixture.poison_calls);
     try std.testing.expectEqual(@as(u32, 5), fixture.done_calls);
@@ -508,20 +670,28 @@ test "standard adapter preserves native authorization headers without injection"
 
     var database = try openDatabase(null);
     var operation = try database.create(null);
+    var authorization = AuthorizationSequence{ .headers = .{ null, null } };
     try sync.run(
         void,
         std.testing.allocator,
         &database,
         &operation,
         &adapter,
-        .{},
+        .{
+            .authorization = .{
+                .name = "authorization",
+                .value = "Bearer ignored-static",
+            },
+            .authorization_provider = authorization.provider(),
+        },
     );
     try closeAndDeinit(&database);
     server_thread.join();
     if (server_context.failure) |failure| return failure;
 
     const fixture = sync_transport_fixture_stats();
-    try std.testing.expectEqual(@as(c_int, 404), fixture.statuses[0]);
+    try std.testing.expectEqual(@as(usize, 2), authorization.calls);
+    try std.testing.expectEqual(@as(c_int, 302), fixture.statuses[0]);
     try std.testing.expectEqual(@as(c_int, 200), fixture.statuses[1]);
     try std.testing.expectEqual(@as(u32, 0), fixture.poison_calls);
 }
@@ -593,7 +763,7 @@ const ServerContext = struct {
 };
 
 const AuthorizationMode = enum {
-    replacement,
+    replacement_sequence,
     preserve_native,
 };
 
@@ -624,7 +794,9 @@ fn serveRequestsFallible(context: *ServerContext) !void {
         var saw_native = false;
         var saw_content_type = false;
         var authorization_count: usize = 0;
-        var saw_fresh_authorization = false;
+        var saw_fresh_one = false;
+        var saw_fresh_two = false;
+        var saw_ignored_static = false;
         var saw_stale_upper = false;
         var saw_stale_mixed = false;
         while (true) {
@@ -642,8 +814,12 @@ fn serveRequestsFallible(context: *ServerContext) !void {
                 saw_content_type = true;
             } else if (std.ascii.startsWithIgnoreCase(line, "authorization:")) {
                 authorization_count += 1;
-                if (std.ascii.eqlIgnoreCase(line, "authorization: Bearer loopback-secret")) {
-                    saw_fresh_authorization = true;
+                if (std.ascii.eqlIgnoreCase(line, "authorization: Bearer loopback-one")) {
+                    saw_fresh_one = true;
+                } else if (std.ascii.eqlIgnoreCase(line, "authorization: Bearer loopback-two")) {
+                    saw_fresh_two = true;
+                } else if (std.ascii.eqlIgnoreCase(line, "authorization: Bearer ignored-static")) {
+                    saw_ignored_static = true;
                 } else if (std.ascii.eqlIgnoreCase(line, "authorization: Bearer stale-upper")) {
                     saw_stale_upper = true;
                 } else if (std.ascii.eqlIgnoreCase(line, "authorization: Bearer stale-mixed")) {
@@ -654,14 +830,19 @@ fn serveRequestsFallible(context: *ServerContext) !void {
         if (!saw_native) return error.MissingNativeHeader;
         if (!saw_content_type) return error.MissingContentTypeHeader;
         switch (context.authorization_mode) {
-            .replacement => {
+            .replacement_sequence => {
                 if (authorization_count != 1) return error.BadAuthorizationCount;
-                if (!saw_fresh_authorization) return error.MissingFreshAuthorization;
+                if (request_index == 0 and (!saw_fresh_one or saw_fresh_two))
+                    return error.MissingFirstAuthorization;
+                if (request_index == 1 and (!saw_fresh_two or saw_fresh_one))
+                    return error.MissingSecondAuthorization;
+                if (saw_ignored_static) return error.IgnoredStaticAuthorizationLeaked;
                 if (saw_stale_upper or saw_stale_mixed) return error.StaleAuthorizationLeaked;
             },
             .preserve_native => {
                 if (authorization_count != 2) return error.BadAuthorizationCount;
-                if (saw_fresh_authorization) return error.UnexpectedFreshAuthorization;
+                if (saw_fresh_one or saw_fresh_two or saw_ignored_static)
+                    return error.UnexpectedFreshAuthorization;
                 if (!saw_stale_upper or !saw_stale_mixed) return error.MissingNativeAuthorization;
             },
         }
@@ -675,7 +856,7 @@ fn serveRequestsFallible(context: *ServerContext) !void {
             try writeResponse(
                 stream,
                 context.io,
-                "HTTP/1.1 404 Not Found\r\nContent-Length: 16\r\nConnection: close\r\n\r\nprotocol-non2xx!",
+                "HTTP/1.1 302 Found\r\nLocation: /must-not-follow\r\nContent-Length: 16\r\nConnection: close\r\n\r\nprotocol-non2xx!",
             );
         } else {
             if (content_length != 0) return error.UnexpectedGetBody;

@@ -113,7 +113,11 @@ consumption, I/O item completion/poisoning, authorization redaction, HTTP
 status bounds, atomic full writes, missing reads, and lexical path rejection.
 They also cover the high-level no-change and apply paths, push-before-pull
 ordering, wait/apply/push failure cleanup, and caller-owned recovery through
-`runVoid`.
+`runVoid`. Transport tests prove static authorization compatibility,
+per-HTTP-item token rotation, provider-null native-header preservation,
+fixed-category provider failure cleanup, invalid-header rejection, exact
+case-insensitive replacement, and unhandled redirects against a loopback
+server.
 Native-independent sync configuration tests exercise the partial-bootstrap
 platform policy for Linux, macOS, Windows, and FreeBSD: file-backed partial
 bootstrap is Linux-only while `:memory:` remains portable. This proves wrapper

@@ -200,9 +200,31 @@ A transport supplies synchronous HTTP, full-read, and atomic-full-write methods.
 `StandardTransport` borrows a caller-owned allocator, `std.Io`,
 `std.http.Client`, and explicitly supplied root directory for the full run. It
 requires HTTPS unless `allow_http` is deliberately enabled, never follows
-redirects, and accepts an optional authorization header separately from native
-request headers. Transport failures cross the native boundary only as fixed
-redacted categories.
+redirects, and accepts wrapper authorization separately from native request
+headers. `TransportOptions.authorization` is the source-compatible static
+borrow. `authorization_provider` is an optional erased context plus callback:
+the driver invokes it exactly once for each HTTP item, immediately before the
+caller-owned transport, and never for full-file items. Its result is
+authoritative even when the static field is populated; returning null
+deliberately disables wrapper injection for that request and preserves native
+headers.
+
+The provider's optional header and both slices remain caller-owned and need
+only stay valid until the synchronous transport `request` method returns.
+Neither the driver nor `StandardTransport` stores or owns token bytes.
+`StandardTransport` validates static and provider headers through the same RFC
+token/CR-LF boundary, and replaces every case-insensitive native
+`Authorization` header with exactly one wrapper header when one is present.
+Redirect handling remains `.unhandled`, so wrapper authorization is never
+automatically forwarded to another origin.
+
+A single `run` invokes its provider serially, but the binding does not
+synchronize a shared provider context across separate concurrent runs. The
+caller owns that synchronization and must not re-enter the same database or
+operation from the callback. Provider errors are replaced with the fixed
+`sync authorization provider failure` poison/diagnostic category; returned
+header bytes and callback error details are never formatted. Transport failures
+likewise cross the native boundary only as fixed redacted categories.
 
 Standard file handling accepts normalized, non-empty, root-relative `/` paths
 and rejects absolute paths, `.`/`..`, empty components, backslashes, NUL, and

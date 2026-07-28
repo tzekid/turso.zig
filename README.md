@@ -211,6 +211,14 @@ enabled; the example enables it only after parsing a loopback URL. It does not
 follow redirects, redacts authorization failures, and confines file requests
 to normalized root-relative paths.
 
+`TransportOptions.authorization` remains the borrowed static-credential path.
+For refreshable credentials, set `authorization_provider`: its caller-owned
+callback is resolved once for every HTTP item and may return a different
+borrowed header—or null—without rebuilding the database or operation.
+`StandardTransport` retains no token storage and replaces native
+`Authorization` headers case-insensitively only when wrapper authorization is
+present.
+
 Common blocking workflows are available directly from `turso_sync`:
 `runVoid` and `runConnection` drive caller-owned typed operations; `pull`
 performs wait plus conditional apply and returns a `PullSummary`; `sync`

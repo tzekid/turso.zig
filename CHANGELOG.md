@@ -14,6 +14,9 @@ is pre-1.0.
 - Added common sync workflows for typed void/Connection operations, conditional
   pull/apply, and explicit push-then-pull sequencing while retaining the
   low-level driver.
+- Added a caller-owned authorization provider resolved independently for every
+  sync HTTP item, with static-header compatibility, explicit null injection,
+  and fixed secret-free failure categories.
 
 ### Changed
 

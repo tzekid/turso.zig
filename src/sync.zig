@@ -63,6 +63,7 @@ pub const FullReadRequest = io.FullReadRequest;
 pub const FullWriteRequest = io.FullWriteRequest;
 pub const TransportHeader = transport.HttpHeader;
 pub const TransportHttpRequest = transport.HttpRequest;
+pub const AuthorizationProvider = transport.AuthorizationProvider;
 pub const TransportOptions = transport.Options;
 pub const BufferWriter = transport.BufferWriter;
 pub const ResponseWriter = transport.ResponseWriter;
