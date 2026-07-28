@@ -36,6 +36,7 @@ compile as execution evidence.
 | Platform | Architectures | Required modes |
 | --- | --- | --- |
 | Linux glibc | x86_64, aarch64 | Debug/ReleaseSafe as configured; source/system; static/dynamic |
+| Linux musl (Alpine 3.22) | x86_64, aarch64 | ReleaseSafe base/sync packages; static/dynamic extracted consumers |
 | macOS | x86_64, aarch64 | Debug and ReleaseSafe; source/system; static/dynamic |
 | Windows MSVC native library | x86_64 | Debug and ReleaseSafe; source/system; static/dynamic |
 
@@ -49,6 +50,8 @@ is not target-native evidence, so Windows ARM64 is not a current release claim.
 Linux additionally runs:
 
 - deterministic source/static/dynamic package assembly and extraction;
+- target-native Alpine 3.22 base/sync package and consumer smokes on x86_64
+  and aarch64, with exact musl/libgcc dependency inspection;
 - an offline repeat build after the dependency graph has been fetched;
 - ABI export and ELF dependency checks;
 - Valgrind ownership smokes on x86_64;

@@ -11,6 +11,7 @@ consumers have passed the target-native CI matrix.
 | turso.zig | `0.1.0` |
 | Zig | `0.16.0` |
 | Rust | `1.88` |
+| Musl package environment | Alpine `3.22`, musl `1.2.5`, image index `sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce` |
 | Turso crate | `0.7.1` |
 | Turso tag | `v0.7.1` |
 | Annotated tag object | `31cdceeb07d3b294e5b2f13b03cfdbbf59769b78` |
@@ -40,8 +41,8 @@ the same release. Then run:
 
 ```sh
 zig fmt --check .
-bash -n tools/*.sh tests/release-package.sh
-shellcheck tools/*.sh tests/release-package.sh
+bash -n tools/*.sh tests/release-package*.sh
+shellcheck tools/*.sh tests/release-package*.sh
 zig build test
 zig build examples
 zig build docs
@@ -76,7 +77,8 @@ pull, apply, query, statistics, and checkpoint behavior with two clients.
 Every job in `.github/workflows/ci.yml` must pass for the release commit:
 
 - native Debug and ReleaseSafe tests on Linux, macOS, and Windows;
-- x86_64 and aarch64 execution on Linux and macOS, plus x86_64 on Windows;
+- x86_64 and aarch64 execution on Linux glibc, Linux musl, and macOS, plus
+  x86_64 on Windows;
 - source and system native-library modes;
 - static and dynamic linkage;
 - base and sync ABI manifests;
@@ -89,9 +91,11 @@ The scheduled extended workflow records a deterministic lifecycle/fan-out soak.
 The drift workflow is advisory: it tests the wrapper against current Turso main
 and Zig master without changing release provenance.
 
-Targets absent from this matrix—including musl, Android, and iOS—are not release
+Targets absent from this matrix—including Android and iOS—are not release
 claims. Source-mode cross compilation is likewise not a support claim unless a
-complete target linker, sysroot, and native runtime proof are supplied.
+complete target linker, sysroot, and native runtime proof are supplied. Musl
+assets are built and consumer-smoked target-natively in the pinned Alpine
+environment; dynamic archives require musl libc and `libgcc_s`.
 Windows ARM64 package policy exists in the tooling, but the hosted lane is
 disabled pending [issue #4](https://github.com/tzekid/turso.zig/issues/4), so
 Windows ARM64 assets are not part of the current release.
@@ -149,8 +153,8 @@ consumer. Each native archive contains the Zig source, the matching header set,
 one selected SDK Kit runtime/static library, a Windows import library when
 needed, both projects' notices, `manifest.json`, and `checksums.sha256`.
 
-The current release collector requires exactly 22 archives and 22 checksum
-sidecars: two source variants plus base/sync static/dynamic archives for five
+The current release collector requires exactly 30 archives and 30 checksum
+sidecars: two source variants plus base/sync static/dynamic archives for seven
 target-native platforms.
 
 ## Publication

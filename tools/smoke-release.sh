@@ -198,6 +198,8 @@ case "$target" in
     source) ;;
     x86_64-unknown-linux-gnu) zig_target_args=(-Dtarget=x86_64-linux-gnu) ;;
     aarch64-unknown-linux-gnu) zig_target_args=(-Dtarget=aarch64-linux-gnu) ;;
+    x86_64-unknown-linux-musl) zig_target_args=(-Dtarget=x86_64-linux-musl) ;;
+    aarch64-unknown-linux-musl) zig_target_args=(-Dtarget=aarch64-linux-musl) ;;
     # These package lanes execute on matching native macOS runners. Keeping
     # the compiler target native lets Zig discover the active Apple SDK and
     # its frameworks; the package target above remains independently audited.

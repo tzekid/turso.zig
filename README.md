@@ -69,9 +69,11 @@ order. `unchecked_extra` is an intentionally conspicuous escape hatch for
 unique, valid UTF-8 tokens not yet known to this binding. Upstream may silently
 ignore those names; accepting their syntax is not a support promise.
 
-The release matrix runs natively on Linux glibc and macOS for x86_64 and
-aarch64, and on Windows for x86_64. Windows ARM64 remains outside the current
-release claim while its hosted lane is isolated in
+The release matrix runs natively on Linux glibc, Linux musl, and macOS for
+x86_64 and aarch64, and on Windows for x86_64. Musl packages execute inside a
+pinned architecture-matching Alpine 3.22 environment rather than under
+emulation. Windows ARM64 remains outside the current release claim while its
+hosted lane is isolated in
 [issue #4](https://github.com/tzekid/turso.zig/issues/4). Linux additionally
 runs fault injection, Valgrind ownership smokes, deterministic soak tests,
 package extraction tests, and a real two-client sync round trip through a local
@@ -136,7 +138,9 @@ Supported dependency options are:
 
 Source-mode cross compilation is intentionally rejected unless Cargo has an
 explicit target linker/sysroot. Use a target-native system library for release
-cross builds.
+cross builds. Musl dynamic source builds automatically disable Rust's default
+static CRT so the SDK Kit `cdylib` is emitted; static and dynamic builds use
+separate Cargo caches.
 
 `zig build native-artifact` installs the selected source-built SDK Kit under
 `zig-out/lib` (and its runtime library under `zig-out/bin` for Windows dynamic
@@ -168,6 +172,7 @@ targets are:
 | Platform | Target triples |
 | --- | --- |
 | Linux glibc | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` |
+| Linux musl (Alpine 3.22, musl 1.2.5) | `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl` |
 | macOS | `x86_64-apple-darwin`, `aarch64-apple-darwin` |
 | Windows | `x86_64-pc-windows-msvc` |
 

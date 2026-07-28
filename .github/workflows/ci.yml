@@ -43,8 +43,8 @@ jobs:
       - name: Verify formatting
         run: |
           zig fmt --check build.zig src tests examples bench tools/*.zig
-          bash -n tools/*.sh tests/release-package.sh
-          shellcheck tools/*.sh tests/release-package.sh
+          bash -n tools/*.sh tests/release-package*.sh
+          shellcheck tools/*.sh tests/release-package*.sh
 
       - name: Run native-independent tests
         run: zig build test-pure -Doptimize=Debug
@@ -631,6 +631,71 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  release-package-musl:
+    name: Linux musl ${{ matrix.arch }} ${{ matrix.variant }} target-native package smoke
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            variant: base
+          - arch: x86_64
+            runner: ubuntu-24.04
+            variant: sync
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            variant: base
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            variant: sync
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build and smoke in the pinned target-native musl environment
+        env:
+          MUSL_ARCH: ${{ matrix.arch }}
+          SDK_VARIANT: ${{ matrix.variant }}
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          work_root="$RUNNER_TEMP/musl-${MUSL_ARCH}-${SDK_VARIANT}"
+          mkdir -p "$work_root"
+          docker run --rm \
+            --name "turso-zig-musl-${MUSL_ARCH}-${SDK_VARIANT}" \
+            --cpus 2 \
+            --memory 12g \
+            --env MUSL_ARCH \
+            --env SDK_VARIANT \
+            --env CI_RUN_URL \
+            --volume "$GITHUB_WORKSPACE:/source:ro" \
+            --volume "$work_root:/work" \
+            alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
+            sh -euxc '
+              apk add --no-cache \
+                bash binutils build-base ca-certificates coreutils curl \
+                file findutils git gzip jq rustup tar xz
+              exec bash /source/tests/release-package-musl.sh \
+                --arch "$MUSL_ARCH" \
+                --variant "$SDK_VARIANT" \
+                --source-root /source \
+                --work-root /work/build \
+                --ci-run-url "$CI_RUN_URL"
+            '
+
+      - name: Upload musl packages and evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-musl-${{ matrix.arch }}-${{ matrix.variant }}-release-package-evidence
+          path: ${{ runner.temp }}/musl-${{ matrix.arch }}-${{ matrix.variant }}/build/upload/
+          if-no-files-found: error
+          retention-days: 14
+
   release-package-macos:
     name: macOS ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke
     runs-on: ${{ matrix.runner }}
@@ -955,6 +1020,7 @@ jobs:
       - macos-native
       - windows-native
       - release-package-linux
+      - release-package-musl
       - release-package-macos
       - release-package-windows
     runs-on: ubuntu-24.04
@@ -996,8 +1062,8 @@ jobs:
               cp "$asset" "$destination"
             fi
           done < <(find release-inputs -type f -print0)
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 22
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz.sha256' | wc -l)" -eq 22
+          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 30
+          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz.sha256' | wc -l)" -eq 30
           for checksum in dist/*.tar.gz.sha256; do
             (
               cd dist

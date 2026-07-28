@@ -329,6 +329,14 @@ else
             [[ "$cpu_baseline" == armv8-a ]] || fail "aarch64 Linux packages require cpu baseline armv8-a"
             [[ "$minimum_platform" =~ ^ubuntu-24\.04[[:space:]]glibc\>\=2\.[0-9]+$ ]] || fail "aarch64 Linux minimum platform must include the audited glibc floor"
             ;;
+        x86_64-unknown-linux-musl)
+            [[ "$cpu_baseline" == x86-64-v1 ]] || fail "x86_64 musl packages require cpu baseline x86-64-v1"
+            [[ "$minimum_platform" =~ ^alpine-3\.22[[:space:]]musl\>\=1\.2\.5$ ]] || fail "x86_64 musl packages require the audited Alpine/musl floor"
+            ;;
+        aarch64-unknown-linux-musl)
+            [[ "$cpu_baseline" == armv8-a ]] || fail "aarch64 musl packages require cpu baseline armv8-a"
+            [[ "$minimum_platform" =~ ^alpine-3\.22[[:space:]]musl\>\=1\.2\.5$ ]] || fail "aarch64 musl packages require the audited Alpine/musl floor"
+            ;;
         x86_64-apple-darwin)
             [[ "$cpu_baseline" == x86-64-v1 ]] || fail "x86_64 Darwin packages require cpu baseline x86-64-v1"
             [[ "$minimum_platform" =~ ^macOS-[0-9]+([.][0-9]+)*$ ]] || fail "Darwin packages require an explicit macOS deployment floor"

@@ -19,6 +19,8 @@ is pre-1.0.
   and fixed secret-free failure categories.
 - Added typed `mvcc_passive_checkpoint` feature configuration and complete
   deterministic rendering for every feature parsed by SDK Kit v0.7.1.
+- Added target-native Alpine 3.22 release packages for x86_64 and aarch64
+  Linux musl, covering base/sync SDK variants with static/dynamic linkage.
 
 ### Changed
 

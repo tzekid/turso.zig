@@ -848,13 +848,23 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
                 configured_cache_root
             else
                 b.pathFromRoot(configured_cache_root);
-            const cargo_target_path = b.pathJoin(&.{ absolute_cache_root, b.pathJoin(&.{
-                "turso-cargo",
-                native_name,
-                rust_target,
-                profile_directory,
-                feature_key,
-            }) });
+            const cargo_target_path = if (config.target.result.abi == .musl)
+                b.pathJoin(&.{ absolute_cache_root, b.pathJoin(&.{
+                    "turso-cargo",
+                    native_name,
+                    rust_target,
+                    profile_directory,
+                    feature_key,
+                    @tagName(config.linkage),
+                }) })
+            else
+                b.pathJoin(&.{ absolute_cache_root, b.pathJoin(&.{
+                    "turso-cargo",
+                    native_name,
+                    rust_target,
+                    profile_directory,
+                    feature_key,
+                }) });
 
             const cargo = b.addSystemCommand(&.{
                 "cargo",
@@ -892,21 +902,29 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
                     "--remap-path-prefix={s}=/turso-src\x1f--remap-path-prefix={s}=/turso-target",
                     .{ dependency_root, cargo_target_path },
                 );
+            // Rust's musl targets default to a static C runtime and silently
+            // drop cdylib output. A shared SDK Kit must opt out; use a distinct
+            // Cargo cache key above so switching linkage cannot reuse artifacts
+            // compiled under the opposite CRT policy.
+            const binding_rust_flags = if (config.target.result.abi == .musl and config.linkage == .dynamic)
+                b.fmt("{s}\x1f-C\x1ftarget-feature=-crt-static", .{remap_flags})
+            else
+                remap_flags;
             if (b.graph.environ_map.get("CARGO_ENCODED_RUSTFLAGS")) |inherited| {
                 cargo.setEnvironmentVariable(
                     "CARGO_ENCODED_RUSTFLAGS",
-                    if (inherited.len == 0) remap_flags else b.fmt("{s}\x1f{s}", .{ inherited, remap_flags }),
+                    if (inherited.len == 0) binding_rust_flags else b.fmt("{s}\x1f{s}", .{ inherited, binding_rust_flags }),
                 );
             } else {
                 cargo.setEnvironmentVariable(
                     "CARGO_ENCODED_RUSTFLAGS",
                     if (b.graph.environ_map.get("RUSTFLAGS")) |inherited|
                         if (inherited.len == 0)
-                            remap_flags
+                            binding_rust_flags
                         else
-                            b.fmt("{s}\x1f{s}", .{ encodeWhitespaceSeparatedRustFlags(b, inherited), remap_flags })
+                            b.fmt("{s}\x1f{s}", .{ encodeWhitespaceSeparatedRustFlags(b, inherited), binding_rust_flags })
                     else
-                        remap_flags,
+                        binding_rust_flags,
                 );
             }
             setCargoNativeRemapFlags(
