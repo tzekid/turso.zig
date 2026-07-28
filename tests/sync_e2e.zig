@@ -38,12 +38,14 @@ pub fn main(init: std.process.Init) !void {
         &diagnostics,
     );
     defer first.deinit();
-    try runVoid(init.gpa, &first, try first.create(&diagnostics), &transport, options);
+    var first_create = try first.create(&diagnostics);
+    try sync.runVoid(init.gpa, &first, &first_create, &transport, options);
 
-    var first_connection = try runConnection(
+    var first_connect = try first.connect(&diagnostics);
+    var first_connection = try sync.runConnection(
         init.gpa,
         &first,
-        try first.connect(&diagnostics),
+        &first_connect,
         &transport,
         options,
     );
@@ -58,7 +60,8 @@ pub fn main(init: std.process.Init) !void {
         &.{},
         .{ .diagnostics = &diagnostics },
     );
-    try runVoid(init.gpa, &first, try first.push(&diagnostics), &transport, options);
+    const first_sync = try sync.sync(init.gpa, &first, &transport, options);
+    if (!first_sync.push_completed) return error.PushDidNotComplete;
 
     var second = try sync.SyncDatabase.new(
         init.gpa,
@@ -72,12 +75,14 @@ pub fn main(init: std.process.Init) !void {
         &diagnostics,
     );
     defer second.deinit();
-    try runVoid(init.gpa, &second, try second.create(&diagnostics), &transport, options);
+    var second_create = try second.create(&diagnostics);
+    try sync.runVoid(init.gpa, &second, &second_create, &transport, options);
 
-    var second_connection = try runConnection(
+    var second_connect = try second.connect(&diagnostics);
+    var second_connection = try sync.runConnection(
         init.gpa,
         &second,
-        try second.connect(&diagnostics),
+        &second_connect,
         &transport,
         options,
     );
@@ -88,27 +93,16 @@ pub fn main(init: std.process.Init) !void {
         &.{},
         .{ .diagnostics = &diagnostics },
     );
-    try runVoid(init.gpa, &second, try second.push(&diagnostics), &transport, options);
+    var second_push = try second.push(&diagnostics);
+    try sync.runVoid(init.gpa, &second, &second_push, &transport, options);
 
-    var wait_operation = try first.wait(&diagnostics);
-    var maybe_changes = try sync.run(
-        ?sync.Changes,
+    const pull = try sync.pull(
         init.gpa,
         &first,
-        &wait_operation,
         &transport,
         options,
     );
-    if (maybe_changes) |*changes| {
-        defer changes.deinit();
-        try runVoid(
-            init.gpa,
-            &first,
-            try first.apply(changes, &diagnostics),
-            &transport,
-            options,
-        );
-    } else {
+    if (!pull.changes_received or !pull.changes_applied) {
         return error.MissingRemoteChanges;
     }
     try expectCount(&first_connection, 2, &diagnostics);
@@ -126,10 +120,11 @@ pub fn main(init: std.process.Init) !void {
     if (stats.network_sent_bytes <= 0 or stats.network_received_bytes <= 0) {
         return error.MissingNetworkEvidence;
     }
-    try runVoid(
+    var checkpoint = try first.checkpoint(&diagnostics);
+    try sync.runVoid(
         init.gpa,
         &first,
-        try first.checkpoint(&diagnostics),
+        &checkpoint,
         &transport,
         options,
     );
@@ -138,29 +133,7 @@ pub fn main(init: std.process.Init) !void {
     try second.close(&diagnostics);
     first_connection.deinit();
     try first.close(&diagnostics);
-    std.debug.print("sync e2e push/bootstrap/pull/apply passed\n", .{});
-}
-
-fn runVoid(
-    allocator: std.mem.Allocator,
-    database: *sync.SyncDatabase,
-    operation_value: sync.Operation(void),
-    transport: anytype,
-    options: sync.TransportOptions,
-) !void {
-    var operation = operation_value;
-    return sync.run(void, allocator, database, &operation, transport, options);
-}
-
-fn runConnection(
-    allocator: std.mem.Allocator,
-    database: *sync.SyncDatabase,
-    operation_value: sync.Operation(sync.Connection),
-    transport: anytype,
-    options: sync.TransportOptions,
-) !sync.Connection {
-    var operation = operation_value;
-    return sync.run(sync.Connection, allocator, database, &operation, transport, options);
+    std.debug.print("sync e2e helpers/push/bootstrap/pull/apply passed\n", .{});
 }
 
 fn expectCount(

@@ -127,9 +127,12 @@ rejection deterministically without treating a cross-compiled binary as
 target-native runtime evidence.
 
 The loopback E2E gate starts the pinned `tursodb --sync-server`, creates two
-independent local clients, pushes from each side, bootstraps the second client,
-pulls/applies into the first, verifies local SQL state, reads statistics, and
-checkpoints. It needs no Cloud account or credentials.
+independent local clients through `runVoid`/`runConnection`, exercises the
+public push-then-pull `sync` helper, bootstraps and pushes from the second
+client, applies its changes through `pull`, verifies local SQL state, reads
+statistics through the low-level typed driver, and checkpoints. This is real
+SDK/server coverage without Cloud credentials; deterministic C fixtures remain
+responsible for adversarial cleanup states and rotating authorization.
 
 ## Release acceptance
 

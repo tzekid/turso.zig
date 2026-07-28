@@ -270,4 +270,6 @@ ABI provides no safe operation cancellation primitive.
 [examples/sync.zig](../examples/sync.zig) shows bootstrap, a local connection,
 push, pull/apply, stats, checkpoint, caller-owned transport, and token handling.
 `zig build test-sync-e2e -Dsync=true -Dsync-server=/path/to/tursodb` runs the
-same lifecycle through two independent local clients without Cloud credentials.
+same lifecycle through two independent local clients and the public
+`runVoid`, `runConnection`, `sync`, and `pull` helpers without Cloud
+credentials. Stats deliberately remains on the low-level typed driver.
