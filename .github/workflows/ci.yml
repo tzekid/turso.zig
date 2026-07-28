@@ -372,7 +372,7 @@ jobs:
   windows-native:
     name: Windows ${{ matrix.arch }} ${{ matrix.optimize }} native/system static/dynamic
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -382,21 +382,29 @@ jobs:
             optimize: Debug
             zig_target: x86_64-windows-msvc
             source_cross_arg: ''
+            zig_jobs: 2
+            test_timeout_arg: ''
           - arch: x86_64
             runner: windows-2025
             optimize: ReleaseSafe
             zig_target: x86_64-windows-msvc
             source_cross_arg: ''
+            zig_jobs: 2
+            test_timeout_arg: ''
           - arch: aarch64
             runner: windows-11-arm
             optimize: Debug
             zig_target: aarch64-windows-msvc
             source_cross_arg: -Dallow-source-cross=true
+            zig_jobs: 1
+            test_timeout_arg: --test-timeout 3m
           - arch: aarch64
             runner: windows-11-arm
             optimize: ReleaseSafe
             zig_target: aarch64-windows-msvc
             source_cross_arg: -Dallow-source-cross=true
+            zig_jobs: 1
+            test_timeout_arg: --test-timeout 3m
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -435,12 +443,12 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
 
       - name: Run native static suite
-        run: zig build test -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all
+        run: zig build test -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
 
       - name: Build dynamic package and expose its DLL for tests
         run: |
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2
+          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
+          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
           dll="$GITHUB_WORKSPACE/zig-out/bin/turso_sdk_kit.dll"
           static_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.lib"
           import_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.dll.lib"
@@ -459,20 +467,20 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Run native dynamic suite with Cargo DLL on PATH
-        run: zig build test -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2 --summary all
+        run: zig build test -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
 
       - name: Run target-native sync static and dynamic acceptance
         if: matrix.optimize == 'ReleaseSafe'
         run: |
           export PATH="/c/Program Files/LLVM/bin:$PATH"
-          zig build test-sync-abi -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2 --summary all
-          zig build -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j2
+          zig build test-sync-abi -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
+          zig build -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j${{ matrix.zig_jobs }}
           sync_dll=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -iname turso_sync_sdk_kit.dll -not -path '*/deps/*' -print -quit)
           sync_static=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -iname turso_sync_sdk_kit.lib ! -iname '*.dll.lib' -not -path '*/deps/*' -print -quit)
           test -n "$sync_dll"
           test -n "$sync_static"
           sync_bin=$(dirname "$sync_dll")
-          PATH="$sync_bin:$PATH" zig build test-sync-abi -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j2 --summary all
+          PATH="$sync_bin:$PATH" zig build test-sync-abi -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
           tools/check-abi-symbols.sh --sync "$sync_static" "$sync_dll"
 
       - name: Check Windows export table
@@ -482,16 +490,16 @@ jobs:
 
       - name: Run system static and dynamic suites
         run: |
-          zig build test -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all
-          zig build test -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2 --summary all
+          zig build test -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
+          zig build test -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
 
       - name: Run clean source/system consumers
         working-directory: tests/consumer
         run: |
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }}
+          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
+          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
+          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
+          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
 
   release-package-linux:
     name: Linux ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke

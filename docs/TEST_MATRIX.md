@@ -43,7 +43,10 @@ static archive. On the Windows ARM runner, the checksum-pinned official x86_64
 Zig host binary runs under Windows emulation because Zig 0.16's native ARM host
 binary exits during build-graph startup. It emits ARM64 code, and the resulting
 ARM64 test programs execute natively on the runner; the job is not
-cross-compile-only evidence.
+cross-compile-only evidence. That lane serializes Zig build work to keep the
+emulated build driver responsive and applies a three-minute per-test timeout.
+The timeout also bounds a stalled native test instead of consuming the entire
+job budget.
 
 Linux additionally runs:
 
