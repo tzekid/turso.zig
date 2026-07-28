@@ -14,6 +14,7 @@ const std = @import("std");
 const database_mod = @import("database.zig");
 const operation_mod = @import("operation.zig");
 const io_mod = @import("io.zig");
+const state_mod = @import("state.zig");
 
 pub const Diagnostics = database_mod.Diagnostics;
 pub const SyncDatabase = database_mod.SyncDatabase;
@@ -92,11 +93,11 @@ pub fn run(
     transport: anytype,
     options: Options,
 ) !T {
-    const recovery = try operation_mod.recoveryForRun(T, operation, options.diagnostics);
+    const state = try operation_mod.stateForRun(T, operation, options.diagnostics);
     var deferred_callback_error: ?anyerror = null;
     while (true) {
-        if (operation_mod.hasPending(recovery)) {
-            _ = try operation_mod.releasePending(recovery, options.diagnostics);
+        if (operation_mod.hasPending(state)) {
+            _ = try operation_mod.releasePending(state, options.diagnostics);
             database.stepIoCallbacks(options.diagnostics) catch |err| {
                 if (deferred_callback_error == null) {
                     deferred_callback_error = err;
@@ -128,7 +129,7 @@ pub fn run(
                 return result;
             },
             .io => {
-                try drainIo(allocator, database, recovery, transport, options);
+                try drainIo(allocator, database, state, transport, options);
                 database.stepIoCallbacks(options.diagnostics) catch |err| {
                     // Resume once more so the native operation can enter its
                     // terminal failed state and remain legally deinitializable.
@@ -146,14 +147,14 @@ pub fn run(
 fn drainIo(
     allocator: std.mem.Allocator,
     database: *SyncDatabase,
-    recovery: *operation_mod.Recovery,
+    state: *state_mod.State,
     transport: anytype,
     options: Options,
 ) !void {
     while (try database.takeIoItem(options.diagnostics)) |taken| {
         var item = taken;
         const kind = item.requestKind(options.diagnostics) catch |request_err| {
-            try poisonOrRetain(recovery, &item, poison_request, request_err, options);
+            try poisonOrRetain(state, &item, poison_request, request_err, options);
             try item.close(options.diagnostics);
             item.deinit();
             continue;
@@ -165,7 +166,7 @@ fn drainIo(
                 .full_read => poison_full_read,
                 .full_write => poison_full_write,
             };
-            try poisonOrRetain(recovery, &item, category, transport_err, options);
+            try poisonOrRetain(state, &item, category, transport_err, options);
         };
         try item.close(options.diagnostics);
         item.deinit();
@@ -173,7 +174,7 @@ fn drainIo(
 }
 
 fn poisonOrRetain(
-    recovery: *operation_mod.Recovery,
+    state: *state_mod.State,
     item: *IoItem,
     category: []const u8,
     first_error: anyerror,
@@ -183,7 +184,7 @@ fn poisonOrRetain(
         if (options.diagnostics) |diagnostics| {
             diagnostics.setWrapperError(category);
         }
-        operation_mod.retainIoItem(recovery, item.*, category);
+        operation_mod.retainIoItem(state, item, category);
         return first_error;
     };
 }

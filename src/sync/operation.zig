@@ -26,20 +26,6 @@ const Phase = enum {
     deinited,
 };
 
-/// Preallocated, package-internal recovery owner for one Operation. The
-/// curated public operation façade does not expose this type or its registry.
-pub const Recovery = struct {
-    allocator: std.mem.Allocator,
-    state: *state_mod.State,
-    operation_handle: ?*const raw.turso_sync_operation_t = null,
-    pending_item: ?io_mod.IoItem = null,
-    pending_poison: ?[]const u8 = null,
-    next: ?*Recovery = null,
-};
-
-var recovery_mutex: std.atomic.Mutex = .unlocked;
-var recovery_head: ?*Recovery = null;
-
 /// Owned copy of sync-engine statistics. The revision remains valid until
 /// `deinit`, independently of the native Operation that produced it.
 pub const Stats = struct {
@@ -242,15 +228,11 @@ pub fn Operation(comptime T: type) type {
                 return error.InvalidState;
             };
             const handle = self.handle orelse return error.InvalidState;
-            const recovery = findDatabaseRecovery(state) orelse {
-                ffi.setWrapperError(diagnostics, "sync operation recovery owner is unavailable");
-                return error.InvalidState;
-            };
-            if (recovery.operation_handle != handle) {
-                ffi.setWrapperError(diagnostics, "sync operation recovery owner does not match its handle");
+            if (state.operation_handle != handle) {
+                ffi.setWrapperError(diagnostics, "sync database does not own this operation handle");
                 return error.InvalidState;
             }
-            if (recovery.pending_item != null or state.outstanding_items != 0) {
+            if (state.pending_item != null or state.outstanding_items != 0) {
                 ffi.setWrapperError(diagnostics, "sync operation cannot close with a checked-out I/O item");
                 return error.InvalidState;
             }
@@ -259,9 +241,7 @@ pub fn Operation(comptime T: type) type {
                 return error.InvalidState;
             }
             raw.turso_sync_operation_deinit(handle);
-            recovery.operation_handle = null;
-            std.debug.assert(state.operation_active);
-            state.operation_active = false;
+            state.operation_handle = null;
             state.operation_needs_io = false;
             self.phase = .deinited;
             self.handle = null;
@@ -288,53 +268,22 @@ pub fn initInternal(
     handle: *const raw.turso_sync_operation_t,
     diagnostics: ?*Diagnostics,
 ) Error!Operation(T) {
-    const recovery = findDatabaseRecovery(state) orelse {
+    if (state.operation_handle != null or state.pending_item != null) {
         raw.turso_sync_operation_deinit(handle);
-        ffi.setWrapperError(diagnostics, "sync database recovery owner is unavailable");
-        return error.InvalidState;
-    };
-    if (recovery.operation_handle != null or recovery.pending_item != null) {
-        raw.turso_sync_operation_deinit(handle);
-        ffi.setWrapperError(diagnostics, "sync database recovery owner is already active");
+        ffi.setWrapperError(diagnostics, "sync database already owns an active operation or retained I/O item");
         return error.InvalidState;
     }
-    recovery.operation_handle = handle;
-    state.operation_active = true;
+    state.operation_handle = handle;
     state.operation_needs_io = false;
     return .{ .state = state, .handle = handle };
 }
 
-pub fn registerDatabaseRecovery(
-    state: *state_mod.State,
-    diagnostics: ?*Diagnostics,
-) Error!void {
-    const recovery = state.allocator.create(Recovery) catch |err| {
-        ffi.setWrapperError(diagnostics, "sync database recovery owner could not be allocated");
-        return err;
-    };
-    recovery.* = .{
-        .allocator = state.allocator,
-        .state = state,
-    };
-    attachRecovery(recovery);
-}
-
-pub fn unregisterDatabaseRecovery(state: *state_mod.State) void {
-    const recovery = findDatabaseRecovery(state) orelse
-        @panic("sync database recovery owner is unavailable");
-    std.debug.assert(recovery.operation_handle == null);
-    std.debug.assert(recovery.pending_item == null);
-    detachRecovery(recovery);
-    recovery.allocator.destroy(recovery);
-}
-
-/// Resolve the internal recovery owner before transport work begins. No
-/// externally mutable recovery field participates in this lookup.
-pub fn recoveryForRun(
+/// Resolve the heap-stable database state before transport work begins.
+pub fn stateForRun(
     comptime T: type,
     operation: *Operation(T),
     diagnostics: ?*Diagnostics,
-) Error!*Recovery {
+) Error!*state_mod.State {
     const state = operation.state orelse {
         ffi.setWrapperError(diagnostics, "sync operation is already closed");
         return error.InvalidState;
@@ -343,92 +292,62 @@ pub fn recoveryForRun(
         ffi.setWrapperError(diagnostics, "sync operation is already closed");
         return error.InvalidState;
     };
-    const recovery = findDatabaseRecovery(state) orelse {
-        ffi.setWrapperError(diagnostics, "sync operation recovery owner is unavailable");
-        return error.InvalidState;
-    };
-    if (recovery.operation_handle != handle) {
-        ffi.setWrapperError(diagnostics, "sync operation recovery owner does not match its handle");
+    if (state.operation_handle != handle) {
+        ffi.setWrapperError(diagnostics, "sync database does not own this operation handle");
         return error.InvalidState;
     }
-    return recovery;
+    return state;
 }
 
-pub fn hasPending(recovery: *const Recovery) bool {
-    return recovery.pending_item != null;
+pub fn hasPending(state: *const state_mod.State) bool {
+    return state.pending_item != null;
 }
 
 pub fn retainIoItem(
-    recovery: *Recovery,
-    item: io_mod.IoItem,
+    state: *state_mod.State,
+    item: *io_mod.IoItem,
     poison_message: []const u8,
 ) void {
-    std.debug.assert(recovery.pending_item == null);
-    std.debug.assert(recovery.pending_poison == null);
-    recovery.pending_item = item;
-    recovery.pending_poison = poison_message;
+    if (state.pending_item != null) {
+        @panic("sync database already retains a failed I/O item");
+    }
+    const item_state = item.state orelse
+        @panic("cannot retain a closed sync I/O item");
+    if (item_state != state) {
+        @panic("cannot retain a sync I/O item for a different database");
+    }
+    const handle = item.handle orelse
+        @panic("cannot retain a closed sync I/O item");
+    state.pending_item = .{
+        .handle = handle,
+        .terminal = item.terminal,
+        .status_set = item.status_set,
+        .poison_message = poison_message,
+    };
+    item.state = null;
+    item.handle = null;
 }
 
 /// Retry recovery in the same stable owner. Every failure leaves both the item
 /// and its poison category intact for a later `run` call.
 pub fn releasePending(
-    recovery: *Recovery,
+    state: *state_mod.State,
     diagnostics: ?*Diagnostics,
 ) Error!bool {
-    const item = if (recovery.pending_item) |*value| value else return false;
-    const poison_message = recovery.pending_poison orelse {
-        ffi.setWrapperError(diagnostics, "sync operation recovery state is incomplete");
-        return error.InvalidState;
+    const pending = state.pending_item orelse return false;
+    var item = io_mod.IoItem{
+        .state = state,
+        .handle = pending.handle,
+        .terminal = pending.terminal,
+        .status_set = pending.status_set,
     };
     if (!item.terminal) {
-        try item.poison(poison_message, diagnostics);
+        try item.poison(pending.poison_message, diagnostics);
     }
     try item.close(diagnostics);
     item.deinit();
-    recovery.pending_item = null;
-    recovery.pending_poison = null;
+    state.pending_item = null;
     return true;
-}
-
-fn attachRecovery(recovery: *Recovery) void {
-    lockRecovery();
-    defer recovery_mutex.unlock();
-    recovery.next = recovery_head;
-    recovery_head = recovery;
-}
-
-fn findDatabaseRecovery(state: *state_mod.State) ?*Recovery {
-    lockRecovery();
-    defer recovery_mutex.unlock();
-    var current = recovery_head;
-    while (current) |recovery| : (current = recovery.next) {
-        if (recovery.state == state) return recovery;
-    }
-    return null;
-}
-
-fn detachRecovery(target: *Recovery) void {
-    lockRecovery();
-    defer recovery_mutex.unlock();
-    var previous: ?*Recovery = null;
-    var current = recovery_head;
-    while (current) |recovery| : (current = recovery.next) {
-        if (recovery == target) {
-            if (previous) |value| {
-                value.next = recovery.next;
-            } else {
-                recovery_head = recovery.next;
-            }
-            recovery.next = null;
-            return;
-        }
-        previous = recovery;
-    }
-    @panic("sync operation recovery registry is inconsistent");
-}
-
-fn lockRecovery() void {
-    while (!recovery_mutex.tryLock()) std.atomic.spinLoopHint();
 }
 
 fn validateResultType(comptime T: type) void {

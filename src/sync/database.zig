@@ -69,7 +69,6 @@ pub const SyncDatabase = struct {
             .allocator = allocator,
             .handle = handle.?,
         };
-        try operation_mod.registerDatabaseRecovery(state, diagnostics);
         return .{ .state = state };
     }
 
@@ -143,7 +142,7 @@ pub const SyncDatabase = struct {
             ffi.setWrapperError(diagnostics, "sync database is already deinited");
             return error.InvalidState;
         };
-        if (!state.operation_active) {
+        if (state.operation_handle == null) {
             ffi.setWrapperError(diagnostics, "sync I/O can be drained only while an operation is active");
             return error.InvalidState;
         }
@@ -159,7 +158,7 @@ pub const SyncDatabase = struct {
             ffi.setWrapperError(diagnostics, "sync database is already deinited");
             return error.InvalidState;
         };
-        if (!state.operation_active) {
+        if (state.operation_handle == null) {
             ffi.setWrapperError(diagnostics, "sync I/O callbacks require an active operation");
             return error.InvalidState;
         }
@@ -188,7 +187,11 @@ pub const SyncDatabase = struct {
             ffi.setWrapperError(diagnostics, "sync database is already closed");
             return error.InvalidState;
         };
-        if (state.operation_active or state.outstanding_items != 0) {
+        if (state.operation_handle != null or
+            state.operation_needs_io or
+            state.outstanding_items != 0 or
+            state.pending_item != null)
+        {
             ffi.setWrapperError(diagnostics, "sync database cannot close with a live operation or I/O item");
             return error.InvalidState;
         }
@@ -197,7 +200,6 @@ pub const SyncDatabase = struct {
             return error.InvalidState;
         }
         raw.turso_sync_database_deinit(state.handle);
-        operation_mod.unregisterDatabaseRecovery(state);
         const allocator = state.allocator;
         allocator.destroy(state);
         self.state = null;
@@ -244,7 +246,7 @@ pub const SyncDatabase = struct {
             ffi.setWrapperError(diagnostics, "sync database is already deinited");
             return error.InvalidState;
         };
-        if (state.operation_active) {
+        if (state.operation_handle != null or state.pending_item != null) {
             ffi.setWrapperError(diagnostics, "sync database already owns an active operation");
             return error.InvalidState;
         }
