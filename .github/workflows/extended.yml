@@ -72,8 +72,11 @@ jobs:
             echo "workers=$WORKERS"
             echo "seed=$SEED"
           } | tee "$RUNNER_TEMP/extended-evidence/environment.txt"
-          /usr/bin/time -v zig build soak \
-            -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2 -- \
+          zig build build-soak \
+            -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2 \
+            2>&1 | tee "$RUNNER_TEMP/extended-evidence/build.log"
+          test -x zig-out/bin/turso-soak
+          /usr/bin/time -v zig-out/bin/turso-soak \
             "$ITERATIONS" "$WORKERS" "$SEED" \
             2>&1 | tee "$RUNNER_TEMP/extended-evidence/soak.log"
           grep -E 'resources fd_before=[0-9]+ fd_after=[0-9]+ threads_before=[0-9]+ threads_after=[0-9]+' \

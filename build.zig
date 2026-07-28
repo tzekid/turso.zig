@@ -305,6 +305,9 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "turso", .module = turso_module }},
         }),
     });
+    const install_soak = b.addInstallArtifact(soak_executable, .{});
+    const build_soak_step = b.step("build-soak", "Install the configurable soak executable without running it");
+    build_soak_step.dependOn(&install_soak.step);
     const run_soak = b.addRunArtifact(soak_executable);
     if (b.args) |args| run_soak.addArgs(args);
     const soak_step = b.step("soak", "Run configurable lifecycle/concurrency soak: zig build soak -- [iterations workers seed]");

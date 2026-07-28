@@ -942,7 +942,7 @@ jobs:
           mkdir -p dist
           while IFS= read -r -d '' asset; do
             case "$asset" in
-              *.tar.gz|*.sha256) ;;
+              *.tar.gz|*.tar.gz.sha256) ;;
               *) continue ;;
             esac
             destination="dist/${asset##*/}"
@@ -953,8 +953,8 @@ jobs:
             fi
           done < <(find release-inputs -type f -print0)
           test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -ge 16
-          test "$(find dist -maxdepth 1 -type f -name '*.sha256' | wc -l)" -ge 16
-          for checksum in dist/*.sha256; do
+          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz.sha256' | wc -l)" -ge 16
+          for checksum in dist/*.tar.gz.sha256; do
             (
               cd dist
               sha256sum --check "${checksum##*/}"
