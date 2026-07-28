@@ -37,18 +37,14 @@ compile as execution evidence.
 | --- | --- | --- |
 | Linux glibc | x86_64, aarch64 | Debug/ReleaseSafe as configured; source/system; static/dynamic |
 | macOS | x86_64, aarch64 | Debug and ReleaseSafe; source/system; static/dynamic |
-| Windows MSVC native library | x86_64, aarch64 | Debug and ReleaseSafe; source/system; static/dynamic |
+| Windows MSVC native library | x86_64 | Debug and ReleaseSafe; source/system; static/dynamic |
 
 Windows jobs select the explicit Zig MSVC target that matches Cargo's native
 Rust triple. This prevents a GNU Zig executable from being linked to an MSVC
-static archive. On the Windows ARM runner, the checksum-pinned official x86_64
-Zig host binary runs under Windows emulation because Zig 0.16's native ARM host
-binary exits during build-graph startup. It emits ARM64 code, and the resulting
-ARM64 test programs execute natively on the runner; the job is not
-cross-compile-only evidence. That lane serializes Zig build work to keep the
-emulated build driver responsive and applies a three-minute per-test timeout.
-The timeout also bounds a stalled native test instead of consuming the entire
-job budget.
+static archive. Windows ARM64 mappings remain in the build and package tooling,
+but the hosted execution lane is disabled pending
+[issue #4](https://github.com/tzekid/turso.zig/issues/4). Compile-only support
+is not target-native evidence, so Windows ARM64 is not a current release claim.
 
 Linux additionally runs:
 
@@ -152,5 +148,6 @@ documented feature limits remain the public claims.
 
 Unsupported claims include source-mode cross compilation without an explicitly
 configured Cargo linker/sysroot, platforms absent from the target matrix,
-caller-driven local async opening, query interruption, sync cancellation,
-remote cipher selection, and transform callbacks.
+Windows ARM64 while issue #4 is open, caller-driven local async opening, query
+interruption, sync cancellation, remote cipher selection, and transform
+callbacks.

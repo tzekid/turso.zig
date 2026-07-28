@@ -76,7 +76,7 @@ pull, apply, query, statistics, and checkpoint behavior with two clients.
 Every job in `.github/workflows/ci.yml` must pass for the release commit:
 
 - native Debug and ReleaseSafe tests on Linux, macOS, and Windows;
-- x86_64 and aarch64 execution rather than cross-compile-only claims;
+- x86_64 and aarch64 execution on Linux and macOS, plus x86_64 on Windows;
 - source and system native-library modes;
 - static and dynamic linkage;
 - base and sync ABI manifests;
@@ -92,6 +92,9 @@ and Zig master without changing release provenance.
 Targets absent from this matrix—including musl, Android, and iOS—are not release
 claims. Source-mode cross compilation is likewise not a support claim unless a
 complete target linker, sysroot, and native runtime proof are supplied.
+Windows ARM64 package policy exists in the tooling, but the hosted lane is
+disabled pending [issue #4](https://github.com/tzekid/turso.zig/issues/4), so
+Windows ARM64 assets are not part of the current release.
 
 ## ABI and package review
 
@@ -128,6 +131,27 @@ tests/release-package.sh \
 Pass `--sync` for the sync variant. The CI workflow is the reference for
 collecting `native-static-libs`, dynamic dependencies, minimum-platform
 metadata, and platform-specific library names.
+
+### Choosing an asset
+
+There is no automatic downloader or platform selector. Building from the
+source archive is the canonical fallback.
+
+| Choice | Filename pattern |
+| --- | --- |
+| Base source | `turso-zig-<version>-source.tar.gz` |
+| Sync source | `turso-zig-<version>-source-sync.tar.gz` |
+| Base native | `turso-zig-<version>-<target>-<static\|dynamic>-encryption-pure-rust-crypto.tar.gz` |
+| Sync native | `turso-zig-<version>-<target>-<static\|dynamic>-sync-pure-rust-crypto.tar.gz` |
+
+Select the exact target triple, base or sync ABI, and linkage needed by the
+consumer. Each native archive contains the Zig source, the matching header set,
+one selected SDK Kit runtime/static library, a Windows import library when
+needed, both projects' notices, `manifest.json`, and `checksums.sha256`.
+
+The current release collector requires exactly 22 archives and 22 checksum
+sidecars: two source variants plus base/sync static/dynamic archives for five
+target-native platforms.
 
 ## Publication
 

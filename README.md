@@ -69,10 +69,13 @@ order. `unchecked_extra` is an intentionally conspicuous escape hatch for
 unique, valid UTF-8 tokens not yet known to this binding. Upstream may silently
 ignore those names; accepting their syntax is not a support promise.
 
-The release matrix runs natively on Linux, macOS, and Windows for x86_64 and
-aarch64. Linux additionally runs fault injection, Valgrind ownership smokes,
-deterministic soak tests, package extraction tests, and a real two-client sync
-round trip through a local `tursodb` server.
+The release matrix runs natively on Linux glibc and macOS for x86_64 and
+aarch64, and on Windows for x86_64. Windows ARM64 remains outside the current
+release claim while its hosted lane is isolated in
+[issue #4](https://github.com/tzekid/turso.zig/issues/4). Linux additionally
+runs fault injection, Valgrind ownership smokes, deterministic soak tests,
+package extraction tests, and a real two-client sync round trip through a local
+`tursodb` server.
 
 ## Install
 
@@ -141,6 +144,32 @@ linkage). Static artifacts omit Rust's duplicate compiler-runtime members and
 transient build-root metadata during this step; the original Cargo output
 remains untouched. macOS dynamic artifacts receive relocatable `@rpath`
 install names.
+
+### Release archives
+
+Building the pinned SDK Kit from source is the canonical fallback. Release
+archives are an optional way to supply a target-native library through
+`native = "system"`; the package does not download or select one automatically.
+
+| Need | Archive name |
+| --- | --- |
+| Base SDK Kit, build locally | `turso-zig-<version>-source.tar.gz` |
+| Sync SDK Kit, build locally | `turso-zig-<version>-source-sync.tar.gz` |
+| Base, prebuilt native | `turso-zig-<version>-<target>-<static\|dynamic>-encryption-pure-rust-crypto.tar.gz` |
+| Sync, prebuilt native | `turso-zig-<version>-<target>-<static\|dynamic>-sync-pure-rust-crypto.tar.gz` |
+
+Choose the exact Rust target triple for the machine, then choose `static` or
+`dynamic` and base or sync. Point `native-path` at the extracted prefix and
+pass the matching `linkage` and `sync` options. Every archive has a checksum
+sidecar and contains a provenance manifest, wrapper and upstream notices, the
+appropriate header set, and exactly one SDK Kit variant. Current prebuilt
+targets are:
+
+| Platform | Target triples |
+| --- | --- |
+| Linux glibc | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` |
+| macOS | `x86_64-apple-darwin`, `aarch64-apple-darwin` |
+| Windows | `x86_64-pc-windows-msvc` |
 
 ## Ownership
 

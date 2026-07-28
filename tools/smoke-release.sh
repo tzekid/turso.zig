@@ -178,6 +178,21 @@ fi
 kind=$(jq -r '.build.kind' "$manifest")
 linkage=$(jq -r '.build.linkage' "$manifest")
 target=$(jq -r '.build.target' "$manifest")
+sdk_library_count=$(
+    find "$package_root" -type f \
+        \( -name 'libturso_sdk_kit.a' \
+        -o -name 'libturso_sdk_kit.so' \
+        -o -name 'libturso_sdk_kit.dylib' \
+        -o -name 'turso_sdk_kit.lib' \
+        -o -name 'turso_sdk_kit.dll' \
+        -o -name 'libturso_sync_sdk_kit.a' \
+        -o -name 'libturso_sync_sdk_kit.so' \
+        -o -name 'libturso_sync_sdk_kit.dylib' \
+        -o -name 'turso_sync_sdk_kit.lib' \
+        -o -name 'turso_sync_sdk_kit.dll' \) |
+        wc -l |
+        tr -d '[:space:]'
+)
 zig_target_args=()
 case "$target" in
     source) ;;
@@ -208,9 +223,11 @@ if [[ "$sync_enabled" == true ]]; then
 fi
 
 if [[ "$kind" == source ]]; then
+    [[ "$sdk_library_count" == 0 ]] || fail "source package unexpectedly contains a native SDK Kit library"
     [[ "$(jq -r '.native' "$manifest")" == null ]] || fail "source package unexpectedly contains native metadata"
     "$package_root/tools/check-abi-symbols.sh" "${abi_args[@]}" --header-only
 else
+    [[ "$sdk_library_count" == 1 ]] || fail "native package must contain exactly one selected SDK Kit library"
     native_rel=$(jq -r '.native.path' "$manifest")
     [[ "$native_rel" != /* && "$native_rel" != ../* && "$native_rel" != *'/../'* ]] || fail "unsafe native path in manifest"
     native_file="$package_root/$native_rel"

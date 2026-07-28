@@ -523,6 +523,15 @@ jobs:
             package_sync_arg: "--sync"
             sdk_name: turso_sync_sdk_kit
             features: pure-rust-crypto
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            cpu_baseline: armv8-a
+            variant: sync
+            build_sync_arg: "-Dsync=true"
+            package_sync_arg: "--sync"
+            sdk_name: turso_sync_sdk_kit
+            features: pure-rust-crypto
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -612,7 +621,7 @@ jobs:
           find "$RUNNER_TEMP/release-work" -maxdepth 2 -type f \
             \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.json' \) \
             -exec cp {} "$EVIDENCE_DIR/packages/" \;
-          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -ge 3
+          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -eq 3
 
       - name: Upload package evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -623,7 +632,7 @@ jobs:
           retention-days: 14
 
   release-package-macos:
-    name: macOS ${{ matrix.arch }} deterministic release package smoke
+    name: macOS ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     strategy:
@@ -634,10 +643,38 @@ jobs:
             runner: macos-14
             rust_target: aarch64-apple-darwin
             cpu_baseline: armv8-a
+            variant: base
+            build_sync_arg: ""
+            package_sync_arg: ""
+            sdk_name: turso_sdk_kit
+            features: encryption,pure-rust-crypto
+          - arch: aarch64
+            runner: macos-14
+            rust_target: aarch64-apple-darwin
+            cpu_baseline: armv8-a
+            variant: sync
+            build_sync_arg: "-Dsync=true"
+            package_sync_arg: "--sync"
+            sdk_name: turso_sync_sdk_kit
+            features: pure-rust-crypto
           - arch: x86_64
             runner: macos-15-intel
             rust_target: x86_64-apple-darwin
             cpu_baseline: x86-64-v1
+            variant: base
+            build_sync_arg: ""
+            package_sync_arg: ""
+            sdk_name: turso_sdk_kit
+            features: encryption,pure-rust-crypto
+          - arch: x86_64
+            runner: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            cpu_baseline: x86-64-v1
+            variant: sync
+            build_sync_arg: "-Dsync=true"
+            package_sync_arg: "--sync"
+            sdk_name: turso_sync_sdk_kit
+            features: pure-rust-crypto
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -670,10 +707,10 @@ jobs:
 
       - name: Build ReleaseSafe native libraries
         run: |
-          zig build native-artifact -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2
-          zig build native-artifact -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j2
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.a"
-          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.dylib"
+          zig build native-artifact -Dnative=source -Dlinkage=static ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
+          zig build native-artifact -Dnative=source -Dlinkage=dynamic ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
+          static_lib="$GITHUB_WORKSPACE/zig-out/lib/lib${{ matrix.sdk_name }}.a"
+          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/lib${{ matrix.sdk_name }}.dylib"
           test -f "$static_lib"
           test -f "$dynamic_lib"
           echo "STATIC_LIBRARY=$static_lib" >> "$GITHUB_ENV"
@@ -687,15 +724,15 @@ jobs:
           static_log="$evidence_dir/native-static-libs.log"
           (
             cd "$UPSTREAM_ROOT"
-            cargo rustc --locked -p turso_sdk_kit --lib --profile lib-release \
+            cargo rustc --locked -p ${{ matrix.sdk_name }} --lib --profile lib-release \
               --target ${{ matrix.rust_target }} --target-dir "$RUNNER_TEMP/cargo-evidence" \
-              --no-default-features --features encryption,pure-rust-crypto \
+              --no-default-features --features ${{ matrix.features }} \
               -- --print native-static-libs
           ) 2>&1 | tee "$static_log"
           static_output=$(sed -n 's/.*native-static-libs: //p' "$static_log" | tail -1)
           test -n "$static_output"
           printf '%s\n' \
-            'command=cargo rustc -p turso_sdk_kit --lib --locked -- --print native-static-libs' \
+            'command=cargo rustc -p ${{ matrix.sdk_name }} --lib --locked -- --print native-static-libs' \
             'target=${{ matrix.rust_target }}' \
             "output=$static_output" > "$evidence_dir/native-static-libs.txt"
           otool -L "$DYNAMIC_LIBRARY" > "$evidence_dir/otool.txt"
@@ -704,9 +741,9 @@ jobs:
           required=$(tail -n +3 "$evidence_dir/otool.txt" | awk '{print $1}' | paste -sd, -)
           test -n "$required"
           install_name=$(otool -D "$DYNAMIC_LIBRARY" | tail -n 1)
-          test "$install_name" = '@rpath/libturso_sdk_kit.dylib'
+          test "$install_name" = '@rpath/lib${{ matrix.sdk_name }}.dylib'
           printf '%s\n' \
-            'command=otool -L libturso_sdk_kit.dylib' \
+            'command=otool -L lib${{ matrix.sdk_name }}.dylib' \
             'target=${{ matrix.rust_target }}' \
             "install_name=$install_name" \
             "required=$required" > "$evidence_dir/native-dynamic-deps.txt"
@@ -721,7 +758,7 @@ jobs:
 
       - name: Assemble twice and smoke extracted native archives
         run: |
-          tests/release-package.sh --skip-source \
+          tests/release-package.sh ${{ matrix.package_sync_arg }} --skip-source \
             --upstream-root "$UPSTREAM_ROOT" \
             --work-root "$RUNNER_TEMP/release-work" \
             --static "$STATIC_LIBRARY" \
@@ -736,18 +773,18 @@ jobs:
           find "$RUNNER_TEMP/release-work" -maxdepth 2 -type f \
             \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.json' \) \
             -exec cp {} "$EVIDENCE_DIR/packages/" \;
-          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -ge 2
+          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -eq 2
 
       - name: Upload macOS packages and evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: macos-${{ matrix.arch }}-release-packages
+          name: macos-${{ matrix.arch }}-${{ matrix.variant }}-release-packages
           path: ${{ runner.temp }}/package-evidence/
           if-no-files-found: error
           retention-days: 14
 
   release-package-windows:
-    name: Windows ${{ matrix.arch }} deterministic release package smoke
+    name: Windows ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     strategy:
@@ -760,7 +797,24 @@ jobs:
             zig_target: x86_64-windows-msvc
             cpu_baseline: x86-64-v1
             source_cross_arg: ''
-          # Windows aarch64 is disabled pending #4.
+            variant: base
+            build_sync_arg: ""
+            package_sync_arg: ""
+            sdk_name: turso_sdk_kit
+            features: encryption,pure-rust-crypto
+          - arch: x86_64
+            runner: windows-2025
+            rust_target: x86_64-pc-windows-msvc
+            zig_target: x86_64-windows-msvc
+            cpu_baseline: x86-64-v1
+            source_cross_arg: ''
+            variant: sync
+            build_sync_arg: "-Dsync=true"
+            package_sync_arg: "--sync"
+            sdk_name: turso_sync_sdk_kit
+            features: pure-rust-crypto
+          # Windows aarch64 remains disabled pending
+          # https://github.com/tzekid/turso.zig/issues/4.
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -814,11 +868,11 @@ jobs:
 
       - name: Build ReleaseSafe native libraries
         run: |
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j2
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.lib"
-          import_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.dll.lib"
-          dynamic_lib="$GITHUB_WORKSPACE/zig-out/bin/turso_sdk_kit.dll"
+          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
+          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
+          static_lib="$GITHUB_WORKSPACE/zig-out/lib/${{ matrix.sdk_name }}.lib"
+          import_lib="$GITHUB_WORKSPACE/zig-out/lib/${{ matrix.sdk_name }}.dll.lib"
+          dynamic_lib="$GITHUB_WORKSPACE/zig-out/bin/${{ matrix.sdk_name }}.dll"
           test -f "$static_lib"
           test -f "$import_lib"
           test -f "$dynamic_lib"
@@ -837,22 +891,22 @@ jobs:
           static_log="$evidence_dir/native-static-libs.log"
           (
             cd "$UPSTREAM_ROOT"
-            cargo rustc --locked -p turso_sdk_kit --lib --profile lib-release \
+            cargo rustc --locked -p ${{ matrix.sdk_name }} --lib --profile lib-release \
               --target ${{ matrix.rust_target }} --target-dir "$RUNNER_TEMP/cargo-evidence" \
-              --no-default-features --features encryption,pure-rust-crypto \
+              --no-default-features --features ${{ matrix.features }} \
               -- --print native-static-libs
           ) 2>&1 | tee "$static_log"
           static_output=$(sed -n 's/.*native-static-libs: //p' "$static_log" | tail -1)
           test -n "$static_output"
           printf '%s\n' \
-            'command=cargo rustc -p turso_sdk_kit --lib --locked -- --print native-static-libs' \
+            'command=cargo rustc -p ${{ matrix.sdk_name }} --lib --locked -- --print native-static-libs' \
             'target=${{ matrix.rust_target }}' \
             "output=$static_output" > "$evidence_dir/native-static-libs.txt"
           llvm-readobj --coff-imports "$DYNAMIC_LIBRARY" > "$evidence_dir/coff-imports.txt"
           required=$(sed -n 's/^[[:space:]]*Name: //p' "$evidence_dir/coff-imports.txt" | sort -u | paste -sd, -)
           test -n "$required"
           printf '%s\n' \
-            'command=llvm-readobj --coff-imports turso_sdk_kit.dll' \
+            'command=llvm-readobj --coff-imports ${{ matrix.sdk_name }}.dll' \
             'target=${{ matrix.rust_target }}' \
             "required=$required" > "$evidence_dir/native-dynamic-deps.txt"
           llvm-readobj --file-headers "$DYNAMIC_LIBRARY" > "$evidence_dir/file-headers.txt"
@@ -865,7 +919,7 @@ jobs:
       - name: Assemble twice and smoke extracted native archives
         run: |
           export PATH="/c/Program Files/LLVM/bin:$PATH"
-          tests/release-package.sh --skip-source \
+          tests/release-package.sh ${{ matrix.package_sync_arg }} --skip-source \
             --upstream-root "$UPSTREAM_ROOT" \
             --work-root "$RUNNER_TEMP/release-work" \
             --static "$STATIC_LIBRARY" \
@@ -881,12 +935,12 @@ jobs:
           find "$RUNNER_TEMP/release-work" -maxdepth 2 -type f \
             \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.json' \) \
             -exec cp {} "$EVIDENCE_DIR/packages/" \;
-          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -ge 2
+          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -eq 2
 
       - name: Upload Windows packages and evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: windows-${{ matrix.arch }}-release-packages
+          name: windows-${{ matrix.arch }}-${{ matrix.variant }}-release-packages
           path: ${{ runner.temp }}/package-evidence/
           if-no-files-found: error
           retention-days: 14
@@ -942,8 +996,8 @@ jobs:
               cp "$asset" "$destination"
             fi
           done < <(find release-inputs -type f -print0)
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -ge 16
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz.sha256' | wc -l)" -ge 16
+          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 22
+          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz.sha256' | wc -l)" -eq 22
           for checksum in dist/*.tar.gz.sha256; do
             (
               cd dist
