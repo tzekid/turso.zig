@@ -164,8 +164,7 @@ test "transport failure is redacted, poisons once, drains the round, and cleans 
 
     try std.testing.expectError(
         error.Io,
-        sync.run(
-            void,
+        sync.runVoid(
             std.testing.allocator,
             &database,
             &operation,
@@ -209,8 +208,7 @@ test "native poison failure retains an internal owner through repeated recovery"
 
     try std.testing.expectError(
         error.InjectedAfterPoisonFailure,
-        sync.run(
-            void,
+        sync.runVoid(
             std.testing.allocator,
             &database,
             &operation,
@@ -232,8 +230,7 @@ test "native poison failure retains an internal owner through repeated recovery"
     diagnostics.setWrapperError("turso.zig test: fail native poison");
     try std.testing.expectError(
         error.Misuse,
-        sync.run(
-            void,
+        sync.runVoid(
             std.testing.allocator,
             &database,
             &operation,
@@ -250,8 +247,7 @@ test "native poison failure retains an internal owner through repeated recovery"
 
     try std.testing.expectError(
         error.Io,
-        sync.run(
-            void,
+        sync.runVoid(
             std.testing.allocator,
             &database,
             &operation,

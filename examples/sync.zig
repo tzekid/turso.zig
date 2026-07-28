@@ -63,17 +63,19 @@ fn run(init: std.process.Init, diagnostics: *sync.Diagnostics) !void {
         .diagnostics = diagnostics,
     };
 
-    try runVoid(
+    var create_operation = try database.create(diagnostics);
+    try sync.runVoid(
         init.gpa,
         &database,
-        try database.create(diagnostics),
+        &create_operation,
         &transport,
         options,
     );
-    var connection = try runConnection(
+    var connect_operation = try database.connect(diagnostics);
+    var connection = try sync.runConnection(
         init.gpa,
         &database,
-        try database.connect(diagnostics),
+        &connect_operation,
         &transport,
         options,
     );
@@ -90,15 +92,16 @@ fn run(init: std.process.Init, diagnostics: *sync.Diagnostics) !void {
         .{message},
         .{ .diagnostics = diagnostics },
     );
-    try runVoid(
+    var push_operation = try database.push(diagnostics);
+    try sync.runVoid(
         init.gpa,
         &database,
-        try database.push(diagnostics),
+        &push_operation,
         &transport,
         options,
     );
 
-    const pulled = try pull(init.gpa, &database, &transport, options);
+    const pull_summary = try sync.pull(init.gpa, &database, &transport, options);
     const row_count = try queryCount(&connection, diagnostics);
 
     var stats_operation = try database.stats(diagnostics);
@@ -111,10 +114,11 @@ fn run(init: std.process.Init, diagnostics: *sync.Diagnostics) !void {
         options,
     );
     defer stats.deinit();
-    try runVoid(
+    var checkpoint_operation = try database.checkpoint(diagnostics);
+    try sync.runVoid(
         init.gpa,
         &database,
-        try database.checkpoint(diagnostics),
+        &checkpoint_operation,
         &transport,
         options,
     );
@@ -123,7 +127,7 @@ fn run(init: std.process.Init, diagnostics: *sync.Diagnostics) !void {
         "sync complete: rows={d} pulled={} sent={d}B received={d}B revision={s}\n",
         .{
             row_count,
-            pulled,
+            pull_summary.changes_applied,
             stats.network_sent_bytes,
             stats.network_received_bytes,
             stats.revision,
@@ -151,57 +155,6 @@ fn readAuthorization(init: std.process.Init, token_path: []const u8) !?[]u8 {
     if (token.len == 0) return error.EmptyAuthorizationToken;
     const authorization = try std.fmt.allocPrint(init.gpa, "Bearer {s}", .{token});
     return authorization;
-}
-
-fn pull(
-    allocator: std.mem.Allocator,
-    database: *sync.SyncDatabase,
-    transport: anytype,
-    options: sync.TransportOptions,
-) !bool {
-    var wait_operation = try database.wait(options.diagnostics);
-    var maybe_changes = try sync.run(
-        ?sync.Changes,
-        allocator,
-        database,
-        &wait_operation,
-        transport,
-        options,
-    );
-    if (maybe_changes) |*changes| {
-        defer changes.deinit();
-        try runVoid(
-            allocator,
-            database,
-            try database.apply(changes, options.diagnostics),
-            transport,
-            options,
-        );
-        return true;
-    }
-    return false;
-}
-
-fn runVoid(
-    allocator: std.mem.Allocator,
-    database: *sync.SyncDatabase,
-    operation_value: sync.Operation(void),
-    transport: anytype,
-    options: sync.TransportOptions,
-) !void {
-    var operation = operation_value;
-    return sync.run(void, allocator, database, &operation, transport, options);
-}
-
-fn runConnection(
-    allocator: std.mem.Allocator,
-    database: *sync.SyncDatabase,
-    operation_value: sync.Operation(sync.Connection),
-    transport: anytype,
-    options: sync.TransportOptions,
-) !sync.Connection {
-    var operation = operation_value;
-    return sync.run(sync.Connection, allocator, database, &operation, transport, options);
 }
 
 fn queryCount(connection: *sync.Connection, diagnostics: *sync.Diagnostics) !i64 {

@@ -211,6 +211,14 @@ enabled; the example enables it only after parsing a loopback URL. It does not
 follow redirects, redacts authorization failures, and confines file requests
 to normalized root-relative paths.
 
+Common blocking workflows are available directly from `turso_sync`:
+`runVoid` and `runConnection` drive caller-owned typed operations; `pull`
+performs wait plus conditional apply and returns a `PullSummary`; `sync`
+performs push followed by pull and returns a `SyncSummary`. The latter is an
+ordered convenience, not a distributed transaction or conflict-retry policy.
+`run`, `Operation(T)`, and the complete I/O lifecycle remain available for
+custom schedulers and manual recovery.
+
 ## Deliberate limits
 
 - The safe local API is blocking. The raw ABI exposes asynchronous database
@@ -237,6 +245,7 @@ zig fmt --check .
 zig build test
 zig build examples
 zig build docs
+zig build test-sync-workflows -Dsync=true
 zig build test-sync-abi -Dsync=true
 ```
 

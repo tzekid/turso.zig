@@ -433,6 +433,10 @@ pub fn build(b: *std.Build) void {
     abi_step.dependOn(&run_abi_tests.step);
 
     const sync_abi_step = b.step("test-sync-abi", "Run opt-in sync raw ABI and operation smoke tests");
+    const sync_workflows_step = b.step(
+        "test-sync-workflows",
+        "Run deterministic sync workflow and transport tests",
+    );
     if (sync_module) |module| {
         const sync_abi_tests = b.addTest(.{
             .name = "turso-sync-abi-tests",
@@ -476,6 +480,7 @@ pub fn build(b: *std.Build) void {
         sync_lifecycle_tests.root_module.link_libc = true;
         const run_sync_lifecycle_tests = b.addRunArtifact(sync_lifecycle_tests);
         sync_abi_step.dependOn(&run_sync_lifecycle_tests.step);
+        sync_workflows_step.dependOn(&run_sync_lifecycle_tests.step);
 
         const sync_transport_module = b.createModule(.{
             .root_source_file = b.path("src/sync.zig"),
@@ -502,6 +507,7 @@ pub fn build(b: *std.Build) void {
         sync_transport_tests.root_module.link_libc = true;
         const run_sync_transport_tests = b.addRunArtifact(sync_transport_tests);
         sync_abi_step.dependOn(&run_sync_transport_tests.step);
+        sync_workflows_step.dependOn(&run_sync_transport_tests.step);
 
         const sync_path_safety_tests = b.addTest(.{
             .name = "turso-sync-path-safety-tests",
@@ -523,6 +529,8 @@ pub fn build(b: *std.Build) void {
     } else {
         const disabled = b.addFail("test-sync-abi requires -Dsync=true");
         sync_abi_step.dependOn(&disabled.step);
+        const workflows_disabled = b.addFail("test-sync-workflows requires -Dsync=true");
+        sync_workflows_step.dependOn(&workflows_disabled.step);
     }
 
     const mismatch_turso_module = b.createModule(.{

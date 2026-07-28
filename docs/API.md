@@ -171,7 +171,31 @@ Result ownership is explicit:
 - `Stats` copies its revision and owns that allocation until `Stats.deinit`;
 - request slices borrow from their `IoItem` and expire at item deinit.
 
-`sync.run` provides the blocking driver, but its transport remains caller-owned.
+The common blocking workflows are:
+
+- `runVoid` and `runConnection`, which infer the operation result type while
+  retaining a caller-owned `*Operation(T)` for checked recovery;
+- `pull`, which waits and conditionally applies an owned `Changes`, returning
+  a `PullSummary` that distinguishes no changes from a completed apply;
+- `sync`, which completes push and then calls `pull`, returning a
+  `SyncSummary`.
+
+`sync` is sequencing only. Push and pull are separate native operations, not a
+distributed transaction, and the helper performs no Busy/BusySnapshot,
+conflict, or cancellation retry. There is deliberately no stats convenience:
+`Stats` ownership remains explicit. `sync.run`, `Operation(T)`, `IoItem`, and
+the callback steps remain exposed for custom schedulers.
+
+All workflows borrow the allocator, database, transport, and transport options
+for the synchronous call. `runVoid` and `runConnection` take operation
+pointers rather than consuming values: if native I/O-item recovery fails, the
+caller retains the exact owner and can retry it. `pull` and `sync` create their
+intermediate operations internally; callers that need to recover from the
+catastrophic case where native poison/close itself cannot converge must use the
+low-level operations instead, because the pinned ABI has no cancellation
+primitive that would let a helper discard a hidden live operation safely.
+
+The transport remains caller-owned.
 A transport supplies synchronous HTTP, full-read, and atomic-full-write methods.
 `StandardTransport` borrows a caller-owned allocator, `std.Io`,
 `std.http.Client`, and explicitly supplied root directory for the full run. It
@@ -196,9 +220,9 @@ supported desktop target. Unsupported file-backed configurations fail with
 Most transport failures are poisoned into the native operation, resumed to a
 terminal error, and cleaned before `sync.run` returns. If poisoning or checked
 I/O-item cleanup itself cannot converge, `sync.run` returns while the caller's
-`Operation` remains live; retain that value and call `sync.run` again after the
-underlying condition is repaired. The pinned ABI provides no safe operation
-cancellation primitive.
+`Operation` remains live; retain that value and call `sync.run`, `runVoid`, or
+`runConnection` again after the underlying condition is repaired. The pinned
+ABI provides no safe operation cancellation primitive.
 
 [examples/sync.zig](../examples/sync.zig) shows bootstrap, a local connection,
 push, pull/apply, stats, checkpoint, caller-owned transport, and token handling.

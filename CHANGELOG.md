@@ -11,6 +11,9 @@ is pre-1.0.
 - Added structured parameterized batches with explicit atomic/non-atomic
   transaction policy, partial failure reports, per-entry change/row-ID
   metadata, and bounded allocator-owned row materialization.
+- Added common sync workflows for typed void/Connection operations, conditional
+  pull/apply, and explicit push-then-pull sequencing while retaining the
+  low-level driver.
 
 ### Changed
 

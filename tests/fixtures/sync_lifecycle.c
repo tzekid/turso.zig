@@ -44,6 +44,11 @@ struct fixture_stats {
     uint32_t buffer_calls;
     uint32_t done_calls;
     uint32_t poison_calls;
+    uint32_t push_calls;
+    uint32_t wait_calls;
+    uint32_t apply_calls;
+    uint32_t workflow_sequence_len;
+    uint32_t workflow_sequence[3];
 };
 
 static struct fixture_stats stats;
@@ -58,6 +63,14 @@ static int io_taken;
 static int invalid_header_count;
 static turso_sync_io_request_type_t io_kind = TURSO_SYNC_IO_HTTP;
 static char revision[] = "rev-123";
+
+static void record_workflow_step(uint32_t step)
+{
+    if (stats.workflow_sequence_len < 3) {
+        stats.workflow_sequence[stats.workflow_sequence_len] = step;
+    }
+    stats.workflow_sequence_len += 1;
+}
 
 static const char *owned_message(const char *message)
 {
@@ -179,7 +192,17 @@ static turso_status_code_t new_operation(
 VOID_OPERATION(turso_sync_database_open)
 VOID_OPERATION(turso_sync_database_create)
 VOID_OPERATION(turso_sync_database_checkpoint)
-VOID_OPERATION(turso_sync_database_push_changes)
+
+turso_status_code_t turso_sync_database_push_changes(
+    const turso_sync_database_t *database,
+    const turso_sync_operation_t **operation,
+    const char **error_out)
+{
+    (void)database;
+    stats.push_calls += 1;
+    record_workflow_step(1);
+    return new_operation(TURSO_ASYNC_RESULT_NONE, operation, error_out);
+}
 
 turso_status_code_t turso_sync_database_connect(
     const turso_sync_database_t *database,
@@ -205,6 +228,8 @@ turso_status_code_t turso_sync_database_wait_changes(
     const char **error_out)
 {
     (void)database;
+    stats.wait_calls += 1;
+    record_workflow_step(2);
     return new_operation(TURSO_ASYNC_RESULT_CHANGES, operation, error_out);
 }
 
@@ -215,6 +240,8 @@ turso_status_code_t turso_sync_database_apply_changes(
     const char **error_out)
 {
     (void)database;
+    stats.apply_calls += 1;
+    record_workflow_step(3);
     if (changes != NULL) {
         stats.changes_consumed += 1;
         free((void *)changes);

@@ -16,6 +16,7 @@ and clean downstream consumption.
 | Aggregate | `zig build test` | All of the above plus durability, 32-bit compile safety, and short soak |
 | Examples | `zig build examples` | Public local examples compile and run; secret-bearing examples compile only |
 | API docs | `zig build docs` | Both public module surfaces are documentation-clean |
+| Sync workflows | `zig build test-sync-workflows -Dsync=true` | Deterministic typed runners, push/pull/apply summaries, error cleanup, and retained-I/O recovery |
 | Sync ABI | `zig build test-sync-abi -Dsync=true` | Combined base/sync ABI and deterministic transport/lifecycle behavior |
 | Sync E2E | `zig build test-sync-e2e -Dsync=true -Dsync-server=/path/to/tursodb` | Two-client push, bootstrap, pull/apply, stats, and checkpoint |
 | ABI exports | `zig build test-abi-symbols` | Native exports exactly match the selected header manifest |
@@ -110,6 +111,9 @@ blocking.
 Deterministic C fixtures cover operation polling, result extraction, changes
 consumption, I/O item completion/poisoning, authorization redaction, HTTP
 status bounds, atomic full writes, missing reads, and lexical path rejection.
+They also cover the high-level no-change and apply paths, push-before-pull
+ordering, wait/apply/push failure cleanup, and caller-owned recovery through
+`runVoid`.
 Native-independent sync configuration tests exercise the partial-bootstrap
 platform policy for Linux, macOS, Windows, and FreeBSD: file-backed partial
 bootstrap is Linux-only while `:memory:` remains portable. This proves wrapper

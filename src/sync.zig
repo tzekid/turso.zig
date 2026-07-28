@@ -12,6 +12,7 @@ const operation_mod = @import("sync/operation.zig");
 const io_mod = @import("sync/io.zig");
 pub const transport = @import("sync/transport.zig");
 pub const std_transport = @import("sync/std_transport.zig");
+const workflows_mod = @import("sync/workflows.zig");
 
 /// Curated configuration façade. Native C configuration remains under `raw`.
 pub const config = struct {
@@ -66,6 +67,12 @@ pub const TransportOptions = transport.Options;
 pub const BufferWriter = transport.BufferWriter;
 pub const ResponseWriter = transport.ResponseWriter;
 pub const run = transport.run;
+pub const PullSummary = workflows_mod.PullSummary;
+pub const SyncSummary = workflows_mod.SyncSummary;
+pub const runVoid = workflows_mod.runVoid;
+pub const runConnection = workflows_mod.runConnection;
+pub const pull = workflows_mod.pull;
+pub const sync = workflows_mod.sync;
 pub const StandardTransport = std_transport.StandardTransport;
 
 test {
@@ -77,6 +84,7 @@ test {
     _ = io;
     _ = transport;
     _ = std_transport;
+    _ = workflows_mod;
 
     if (@hasDecl(config, "NativeConfig")) {
         @compileError("NativeConfig must not be part of the curated sync API");
@@ -89,5 +97,13 @@ test {
     }
     if (@hasDecl(Changes, "takeForApply")) {
         @compileError("Changes.takeForApply must not be part of the curated sync API");
+    }
+    if (!@hasDecl(@This(), "run") or
+        !@hasDecl(@This(), "runVoid") or
+        !@hasDecl(@This(), "runConnection") or
+        !@hasDecl(@This(), "pull") or
+        !@hasDecl(@This(), "sync"))
+    {
+        @compileError("low- and high-level sync workflows must remain exposed");
     }
 }

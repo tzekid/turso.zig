@@ -19,6 +19,11 @@ const FixtureStats = extern struct {
     buffer_calls: u32,
     done_calls: u32,
     poison_calls: u32,
+    push_calls: u32,
+    wait_calls: u32,
+    apply_calls: u32,
+    workflow_sequence_len: u32,
+    workflow_sequence: [3]u32,
 };
 
 extern fn sync_lifecycle_fixture_reset() void;
@@ -35,6 +40,32 @@ extern fn sync_lifecycle_fixture_set(
 ) void;
 extern fn sync_lifecycle_fixture_stats() FixtureStats;
 
+const NoIoTransport = struct {
+    pub fn request(
+        _: *NoIoTransport,
+        _: sync.TransportHttpRequest,
+        _: *sync.ResponseWriter,
+    ) error{UnexpectedIo}!void {
+        return error.UnexpectedIo;
+    }
+
+    pub fn readFile(
+        _: *NoIoTransport,
+        _: []const u8,
+        _: *sync.BufferWriter,
+    ) error{UnexpectedIo}!void {
+        return error.UnexpectedIo;
+    }
+
+    pub fn writeFileAtomically(
+        _: *NoIoTransport,
+        _: []const u8,
+        _: []const u8,
+    ) error{UnexpectedIo}!void {
+        return error.UnexpectedIo;
+    }
+};
+
 test "curated sync API exposes checked close and infallible cleanup only" {
     comptime {
         requireVoidDeinit(sync.SyncDatabase);
@@ -49,6 +80,11 @@ test "curated sync API exposes checked close and infallible cleanup only" {
     try std.testing.expect(!@hasDecl(sync.Changes, "takeForApply"));
     try std.testing.expect(!@hasField(sync.Operation(void), "pending_item"));
     try std.testing.expect(!@hasField(sync.Operation(void), "pending_poison"));
+    try std.testing.expect(@hasDecl(sync, "run"));
+    try std.testing.expect(@hasDecl(sync, "runVoid"));
+    try std.testing.expect(@hasDecl(sync, "runConnection"));
+    try std.testing.expect(@hasDecl(sync, "pull"));
+    try std.testing.expect(@hasDecl(sync, "sync"));
 }
 
 test "constructor frees partial handles and native messages" {
@@ -186,6 +222,163 @@ test "null changes are represented without an owner" {
     try std.testing.expect((try operation.finish(null)) == null);
     try closeAndDeinit(&operation);
     try closeAndDeinit(&database);
+}
+
+test "typed workflow runners preserve caller-owned operation lifecycles" {
+    sync_lifecycle_fixture_reset();
+    var database = try openDatabase(std.testing.allocator, null);
+    var transport = NoIoTransport{};
+
+    var checkpoint = try database.checkpoint(null);
+    try sync.runVoid(
+        std.testing.allocator,
+        &database,
+        &checkpoint,
+        &transport,
+        .{},
+    );
+
+    var connect = try database.connect(null);
+    var connection = try sync.runConnection(
+        std.testing.allocator,
+        &database,
+        &connect,
+        &transport,
+        .{},
+    );
+    connection.deinit();
+    try closeAndDeinit(&database);
+
+    const fixture = sync_lifecycle_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 2), fixture.operations_created);
+    try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+    try std.testing.expectEqual(@as(u32, 1), fixture.connections_created);
+    try std.testing.expectEqual(fixture.connections_created, fixture.connections_deinited);
+}
+
+test "pull distinguishes no changes from consumed and applied changes" {
+    {
+        sync_lifecycle_fixture_reset();
+        sync_lifecycle_fixture_set(0, 0, 0, 0, 1, 0, 0, 1, 0);
+        var database = try openDatabase(std.testing.allocator, null);
+        var transport = NoIoTransport{};
+        const summary = try sync.pull(
+            std.testing.allocator,
+            &database,
+            &transport,
+            .{},
+        );
+        try std.testing.expect(!summary.changes_received);
+        try std.testing.expect(!summary.changes_applied);
+        try closeAndDeinit(&database);
+
+        const fixture = sync_lifecycle_fixture_stats();
+        try std.testing.expectEqual(@as(u32, 1), fixture.operations_created);
+        try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+        try std.testing.expectEqual(@as(u32, 0), fixture.changes_created);
+    }
+
+    {
+        sync_lifecycle_fixture_reset();
+        var database = try openDatabase(std.testing.allocator, null);
+        var transport = NoIoTransport{};
+        const summary = try sync.pull(
+            std.testing.allocator,
+            &database,
+            &transport,
+            .{},
+        );
+        try std.testing.expect(summary.changes_received);
+        try std.testing.expect(summary.changes_applied);
+        try closeAndDeinit(&database);
+
+        const fixture = sync_lifecycle_fixture_stats();
+        try std.testing.expectEqual(@as(u32, 2), fixture.operations_created);
+        try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+        try std.testing.expectEqual(@as(u32, 1), fixture.changes_created);
+        try std.testing.expectEqual(@as(u32, 1), fixture.changes_consumed);
+        try std.testing.expectEqual(@as(u32, 0), fixture.changes_deinited);
+    }
+}
+
+test "sync workflow completes push before pull and apply" {
+    sync_lifecycle_fixture_reset();
+    var database = try openDatabase(std.testing.allocator, null);
+    var transport = NoIoTransport{};
+    const summary = try sync.sync(
+        std.testing.allocator,
+        &database,
+        &transport,
+        .{},
+    );
+    try std.testing.expect(summary.push_completed);
+    try std.testing.expect(summary.pull.changes_received);
+    try std.testing.expect(summary.pull.changes_applied);
+    try closeAndDeinit(&database);
+
+    const fixture = sync_lifecycle_fixture_stats();
+    try std.testing.expectEqual(@as(u32, 3), fixture.operations_created);
+    try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+    try std.testing.expectEqual(@as(u32, 1), fixture.changes_consumed);
+    try std.testing.expectEqual(@as(u32, 1), fixture.push_calls);
+    try std.testing.expectEqual(@as(u32, 1), fixture.wait_calls);
+    try std.testing.expectEqual(@as(u32, 1), fixture.apply_calls);
+    try std.testing.expectEqual(@as(u32, 3), fixture.workflow_sequence_len);
+    try std.testing.expectEqualSlices(
+        u32,
+        &.{ 1, 2, 3 },
+        &fixture.workflow_sequence,
+    );
+}
+
+test "workflow wait apply and push failures release ordinary intermediate owners" {
+    {
+        sync_lifecycle_fixture_reset();
+        sync_lifecycle_fixture_set(0, 0, 1, 0, 0, 0, 0, 1, 0);
+        var database = try openDatabase(std.testing.allocator, null);
+        var transport = NoIoTransport{};
+        try std.testing.expectError(
+            error.Io,
+            sync.pull(std.testing.allocator, &database, &transport, .{}),
+        );
+        try closeAndDeinit(&database);
+        const fixture = sync_lifecycle_fixture_stats();
+        try std.testing.expectEqual(@as(u32, 1), fixture.operations_created);
+        try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+    }
+
+    {
+        sync_lifecycle_fixture_reset();
+        sync_lifecycle_fixture_set(0, 0, 0, 0, 0, 1, 0, 1, 0);
+        var database = try openDatabase(std.testing.allocator, null);
+        var transport = NoIoTransport{};
+        try std.testing.expectError(
+            error.Io,
+            sync.pull(std.testing.allocator, &database, &transport, .{}),
+        );
+        try closeAndDeinit(&database);
+        const fixture = sync_lifecycle_fixture_stats();
+        try std.testing.expectEqual(@as(u32, 1), fixture.operations_created);
+        try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+        try std.testing.expectEqual(@as(u32, 1), fixture.changes_created);
+        try std.testing.expectEqual(@as(u32, 1), fixture.changes_consumed);
+    }
+
+    {
+        sync_lifecycle_fixture_reset();
+        sync_lifecycle_fixture_set(0, 0, 1, 0, 0, 0, 0, 1, 0);
+        var database = try openDatabase(std.testing.allocator, null);
+        var transport = NoIoTransport{};
+        try std.testing.expectError(
+            error.Io,
+            sync.sync(std.testing.allocator, &database, &transport, .{}),
+        );
+        try closeAndDeinit(&database);
+        const fixture = sync_lifecycle_fixture_stats();
+        try std.testing.expectEqual(@as(u32, 1), fixture.operations_created);
+        try std.testing.expectEqual(fixture.operations_created, fixture.operations_deinited);
+        try std.testing.expectEqual(@as(u32, 0), fixture.changes_created);
+    }
 }
 
 test "changes deinit and apply consume ownership on success and failure" {
