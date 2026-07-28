@@ -105,7 +105,7 @@ target in the application build (`-Dtarget=x86_64-windows-msvc` or
 `-Dtarget=aarch64-windows-msvc`) so Zig and Rust use one ABI; the resolved
 target forwarded above keeps the dependency and application aligned.
 
-The dependency builds Turso v0.7.0 from source by default. To use a separately
+The dependency builds Turso v0.7.1 from source by default. To use a separately
 installed SDK Kit, forward `.native = "system"` and
 `.@"native-path" = "/your/prefix"`; the library is read from `prefix/lib`.
 Dynamic Unix builds add that directory as a runtime search path. A Windows

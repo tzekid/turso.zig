@@ -10,9 +10,9 @@ include/turso.h is copied from:
 
   Project: Turso Database
   Source: https://github.com/tursodatabase/turso
-  Tag: v0.7.0
-  Commit: e7cb62a8bd2f3655a661a621ee389365c1a1e43e
-  Annotated tag object: c401a2e44e1a3b0435b4e8d5501e945283d2ba10
+  Tag: v0.7.1
+  Commit: 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
+  Annotated tag object: 31cdceeb07d3b294e5b2f13b03cfdbbf59769b78
   Path: sdk-kit/turso.h
   Upstream body SHA-256: 14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb
   License: MIT

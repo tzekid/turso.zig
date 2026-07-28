@@ -266,7 +266,7 @@ grep -F "$header_sha" "$source_root/NOTICE" >/dev/null || fail "NOTICE lacks the
 source_commit=$(git -C "$source_root" rev-parse HEAD)
 fingerprint=$(sed -n -E 's/^[[:space:]]*\.fingerprint[[:space:]]*=[[:space:]]*([^,]+),.*/\1/p' "$source_root/build.zig.zon" | head -1)
 package_hash=$(sed -n -E 's/^[[:space:]]*\.hash[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$source_root/build.zig.zon" | head -1)
-source_epoch=1783955531
+source_epoch=1784727869
 [[ -n "$fingerprint" && -n "$package_hash" ]] || fail "package fingerprint or upstream package hash is missing"
 
 if [[ -z "$features" ]]; then

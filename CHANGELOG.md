@@ -8,6 +8,8 @@ is pre-1.0.
 
 ### Changed
 
+- Updated the pinned Turso SDK Kit source to v0.7.1; the audited base and sync
+  C header bodies and exported symbol surfaces are unchanged from v0.7.0.
 - Scoped sync-operation recovery state to each heap-stable `SyncDatabase`
   instead of a process-global registry and spinlock.
 - Restricted standard-transport HTTP field names to RFC token characters and

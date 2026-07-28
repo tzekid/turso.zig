@@ -24,8 +24,8 @@ test -f "$upstream_sync_header"
 
 commit=$(git -C "$upstream_root" rev-parse HEAD)
 printf '%s\n' \
-  "production_pin=v0.7.0" \
-  "production_commit=e7cb62a8bd2f3655a661a621ee389365c1a1e43e" \
+  "production_pin=v0.7.1" \
+  "production_commit=4a88feb7caef869c16f6215b6dc51eafd5b3e54e" \
   "candidate_commit=$commit" \
   "checked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$output_dir/provenance.txt"
 

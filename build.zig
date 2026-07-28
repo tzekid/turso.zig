@@ -847,7 +847,7 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
             // Upstream's build script otherwise embeds the current time and watches
             // whichever enclosing Git repository Cargo happens to discover. Pinning
             // the tagged commit time makes artifacts reproducible and cache-stable.
-            cargo.setEnvironmentVariable("SOURCE_DATE_EPOCH", "1783955531");
+            cargo.setEnvironmentVariable("SOURCE_DATE_EPOCH", "1784727869");
             // Keep release artifacts independent of the local checkout, Zig
             // cache, Cargo registry, and home-directory locations. Preserve
             // caller flags while appending the deterministic prefix maps.

@@ -21,7 +21,7 @@ static const char *owned_message(const char *message)
 
 const char *turso_version(void)
 {
-    return "0.7.0";
+    return "0.7.1";
 }
 
 void turso_zig_database_set_mode(int value)

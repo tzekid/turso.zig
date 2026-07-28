@@ -11,14 +11,14 @@ consumers have passed the target-native CI matrix.
 | turso.zig | `0.1.0` |
 | Zig | `0.16.0` |
 | Rust | `1.88` |
-| Turso crate | `0.7.0` |
-| Turso tag | `v0.7.0` |
-| Annotated tag object | `c401a2e44e1a3b0435b4e8d5501e945283d2ba10` |
-| Peeled source commit | `e7cb62a8bd2f3655a661a621ee389365c1a1e43e` |
-| Zig package hash | `N-V-__8AACo_qQJTwztGl0T0AuqLsTAAQiDSBvZ8lTdECpBN` |
+| Turso crate | `0.7.1` |
+| Turso tag | `v0.7.1` |
+| Annotated tag object | `31cdceeb07d3b294e5b2f13b03cfdbbf59769b78` |
+| Peeled source commit | `4a88feb7caef869c16f6215b6dc51eafd5b3e54e` |
+| Zig package hash | `N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd` |
 | `turso.h` body SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
 | `turso_sync.h` body SHA-256 | `38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35` |
-| Reproducible source epoch | `1783955531` |
+| Reproducible source epoch | `1784727869` |
 
 The tag object and peeled commit are intentionally recorded separately. The
 vendored headers carry wrapper attribution above the upstream include guards,
@@ -114,7 +114,7 @@ and run consumers from clean extractions:
 
 ```sh
 tests/release-package.sh \
-  --upstream-root /path/to/exact-v0.7.0-checkout \
+  --upstream-root /path/to/exact-v0.7.1-checkout \
   --static /path/to/libturso_sdk_kit.a \
   --dynamic /path/to/libturso_sdk_kit.so \
   --static-deps /path/to/native-static-libs.txt \

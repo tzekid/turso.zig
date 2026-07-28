@@ -103,11 +103,11 @@ jq -e '
     .package.name == "turso.zig" and
     (.package.version | type == "string" and length > 0) and
     (.package.source_commit | test("^[0-9a-f]{40}$")) and
-    .upstream.version == "0.7.0" and
-    .upstream.tag == "v0.7.0" and
-    .upstream.tag_object == "c401a2e44e1a3b0435b4e8d5501e945283d2ba10" and
-    .upstream.commit == "e7cb62a8bd2f3655a661a621ee389365c1a1e43e" and
-    .upstream.zig_package_hash == "N-V-__8AACo_qQJTwztGl0T0AuqLsTAAQiDSBvZ8lTdECpBN" and
+    .upstream.version == "0.7.1" and
+    .upstream.tag == "v0.7.1" and
+    .upstream.tag_object == "31cdceeb07d3b294e5b2f13b03cfdbbf59769b78" and
+    .upstream.commit == "4a88feb7caef869c16f6215b6dc51eafd5b3e54e" and
+    .upstream.zig_package_hash == "N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd" and
     .upstream.header_sha256 == "14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb" and
     (.build.kind == "source" or .build.kind == "native") and
     (.build.sync_enabled | type == "boolean") and
@@ -123,7 +123,7 @@ jq -e '
     (.licenses.wrapper.notice_sha256 | test("^[0-9a-f]{64}$")) and
     (.licenses.upstream.license_sha256 | test("^[0-9a-f]{64}$")) and
     (.licenses.upstream.notice_sha256 | test("^[0-9a-f]{64}$")) and
-    .reproducibility.source_date_epoch == 1783955531 and
+    .reproducibility.source_date_epoch == 1784727869 and
     .reproducibility.normalized_owner == 0 and
     .reproducibility.normalized_group == 0
 ' "$manifest" >/dev/null || fail "manifest schema or pinned provenance is invalid"
