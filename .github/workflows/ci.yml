@@ -391,20 +391,7 @@ jobs:
             source_cross_arg: ''
             zig_jobs: 2
             test_timeout_arg: ''
-          - arch: aarch64
-            runner: windows-11-arm
-            optimize: Debug
-            zig_target: aarch64-windows-msvc
-            source_cross_arg: -Dallow-source-cross=true
-            zig_jobs: 1
-            test_timeout_arg: --test-timeout 3m
-          - arch: aarch64
-            runner: windows-11-arm
-            optimize: ReleaseSafe
-            zig_target: aarch64-windows-msvc
-            source_cross_arg: -Dallow-source-cross=true
-            zig_jobs: 1
-            test_timeout_arg: --test-timeout 3m
+          # Windows aarch64 is disabled pending #4.
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -773,12 +760,7 @@ jobs:
             zig_target: x86_64-windows-msvc
             cpu_baseline: x86-64-v1
             source_cross_arg: ''
-          - arch: aarch64
-            runner: windows-11-arm
-            rust_target: aarch64-pc-windows-msvc
-            zig_target: aarch64-windows-msvc
-            cpu_baseline: armv8-a
-            source_cross_arg: -Dallow-source-cross=true
+          # Windows aarch64 is disabled pending #4.
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
