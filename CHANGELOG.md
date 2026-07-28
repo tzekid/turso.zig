@@ -6,6 +6,8 @@ is pre-1.0.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-28
+
 ### Added
 
 - Added structured parameterized batches with explicit atomic/non-atomic
@@ -42,6 +44,18 @@ is pre-1.0.
   work needed to promote Android/iOS, and kept browser/WASM explicitly outside
   the native SDK Kit C ABI claim.
 
+### Known limitations
+
+- The safe API remains blocking because the pinned C ABI has no complete
+  database-level async driver. Query interruption and in-progress sync
+  cancellation are also unavailable through that ABI.
+- Remote cipher selection and transform callbacks remain omitted until their
+  upstream C conversion and callback paths are complete.
+- Release targets exclude Windows ARM64 while
+  [issue #4](https://github.com/tzekid/turso.zig/issues/4) is open, Android,
+  iOS, and browser/WASM. Sync evidence uses a real local `tursodb` server but
+  does not claim credentialed Turso Cloud coverage.
+
 ## [0.1.0] - 2026-07-27
 
 ### Added
@@ -55,9 +69,9 @@ is pre-1.0.
 - Source and system native-library modes with static and dynamic linkage.
 - Local encryption, feature selection, typed row decoding, examples, generated
   API documentation, clean-consumer tests, and deterministic release packages.
-- Target-native CI on Linux, macOS, and Windows for x86_64 and aarch64, plus
-  ABI probes, ownership/fault tests, soak tests, and a local-server sync
-  round trip.
+- Target-native CI on Linux and macOS for x86_64 and aarch64, and on Windows
+  for x86_64, plus ABI probes, ownership/fault tests, soak tests, and a
+  local-server sync round trip.
 
 ### Security
 
@@ -65,5 +79,6 @@ is pre-1.0.
 - Extension loading disabled by default, credential redaction, strict sync path
   validation, and explicit borrowed-value lifetime checks.
 
-[Unreleased]: https://github.com/tzekid/turso.zig/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/tzekid/turso.zig/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/tzekid/turso.zig/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tzekid/turso.zig/releases/tag/v0.1.0

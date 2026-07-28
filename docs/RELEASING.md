@@ -8,7 +8,7 @@ consumers have passed the target-native CI matrix.
 
 | Item | Value |
 | --- | --- |
-| turso.zig | `0.1.0` |
+| turso.zig | `0.2.0` |
 | Zig | `0.16.0` |
 | Rust | `1.88` |
 | Musl package environment | Alpine `3.22`, musl `1.2.5`, image index `sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce` |

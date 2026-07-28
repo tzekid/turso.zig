@@ -85,7 +85,7 @@ The source backend requires Zig 0.16.0, Rust/Cargo 1.88, and a C toolchain.
 Add the tagged package:
 
 ```sh
-zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
+zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.2.0
 ```
 
 Then expose its module from your `build.zig`:
