@@ -851,6 +851,9 @@ fn destroyControl(control: *StatementControl) void {
             _ = raw.turso_statement_finalize(control.handle, null);
         }
     }
+    // If another statement owns the connection lease, reset/finalize would
+    // violate wrapper exclusivity. Native deinit drops the boxed statement, so
+    // teardown remains complete without terminal calls in that case.
     raw.turso_statement_deinit(control.handle);
     if (can_run_terminal_work) operation_control.cleanupAggregates();
     releaseActive(control);

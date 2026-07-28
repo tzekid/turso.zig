@@ -16,9 +16,9 @@ and clean downstream consumption.
 | Aggregate | `zig build test` | All of the above plus durability, 32-bit compile safety, and short soak |
 | Examples | `zig build examples` | Public local examples compile and run; secret-bearing examples compile only |
 | API docs | `zig build docs` | Both public module surfaces are documentation-clean |
-| Sync workflows | `zig build test-sync-workflows -Dsync=true` | Deterministic typed runners, push/pull/apply summaries, error cleanup, and retained-I/O recovery |
-| Sync ABI | `zig build test-sync-abi -Dsync=true` | Combined base/sync ABI and deterministic transport/lifecycle behavior |
-| Sync E2E | `zig build test-sync-e2e -Dsync=true -Dsync-server=/path/to/tursodb` | Two-client push, bootstrap, pull/apply, stats, and checkpoint |
+| Sync workflows | `zig build test-sync-workflows -Dsync=true` | Deterministic C-fixture-backed typed runners, push/pull/apply summaries, error cleanup, and retained-I/O recovery |
+| Sync ABI | `zig build test-sync-abi -Dsync=true` | Real pinned sync SDK ABI probes and smokes plus deterministic transport/lifecycle fixtures |
+| Sync E2E | `zig build test-sync-e2e -Dsync=true -Dsync-server=/path/to/tursodb` | Real local `tursodb` two-client push, bootstrap, pull/apply, stats, and checkpoint |
 | ABI exports | `zig build test-abi-symbols` | Native exports exactly match the selected header manifest |
 | Disk faults | `zig build test-disk-fault` | Linux ENOSPC and short-write/EIO handling |
 | Valgrind | `tools/check-valgrind.sh` | Representative owners have no definite/indirect leaks |

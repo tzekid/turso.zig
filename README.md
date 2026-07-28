@@ -311,14 +311,15 @@ zig fmt --check .
 zig build test
 zig build examples
 zig build docs
-zig build test-sync-workflows -Dsync=true
-zig build test-sync-abi -Dsync=true
+zig build test-sync-workflows -Dsync=true # deterministic C fixtures
+zig build test-sync-abi -Dsync=true       # real SDK ABI plus fixtures
 ```
 
 Additional steps cover Valgrind, deterministic soak/stress, 32-bit compile
 safety, abrupt-exit durability, disk faults, ABI symbol manifests, clean
-consumers, deterministic release archives, and local sync E2E. Run
-`zig build --help` for the complete list.
+consumers, deterministic release archives, and `test-sync-e2e`, which runs a
+two-client round trip against a real local `tursodb` server. Run `zig build
+--help` for the complete list.
 
 Compatibility and release details live in:
 

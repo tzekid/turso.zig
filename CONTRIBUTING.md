@@ -34,8 +34,8 @@ zig build test-sync-abi -Dsync=true
 Shell changes must also pass:
 
 ```sh
-bash -n tools/*.sh tests/release-package.sh
-shellcheck tools/*.sh tests/release-package.sh
+bash -n tools/*.sh tests/release-package*.sh
+shellcheck tools/*.sh tests/release-package*.sh
 ```
 
 Add a focused regression test for behavior changes. See
