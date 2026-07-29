@@ -1,36 +1,44 @@
 # Platform boundaries
 
-This project calls a target supported only after the exact public package has
-been linked and executed target-natively. Accepting a Zig target triple,
+A target is supported only after its default source/static configuration has
+been built, linked, and executed target-natively. Accepting a Zig target triple,
 compiling declarations, or cross-building a native library is useful evidence,
 but is not by itself a support claim.
 
-## Current scope
+## Support contract
 
-| Target | Status | Evidence boundary |
-| --- | --- | --- |
-| `x86_64-unknown-linux-gnu` | supported | Base and sync, static and dynamic, native suites and extracted-package consumers |
-| `aarch64-unknown-linux-gnu` | supported | Base and sync, static and dynamic, target-native hosted execution |
-| `x86_64-unknown-linux-musl` | supported | Base and sync, static and dynamic, Alpine 3.22/musl 1.2.5 native package consumers |
-| `aarch64-unknown-linux-musl` | supported | Base and sync, static and dynamic, Alpine 3.22/musl 1.2.5 target-native hosted execution |
-| `x86_64-apple-darwin` | supported | Base and sync, static and dynamic, target-native hosted execution |
-| `aarch64-apple-darwin` | supported | Base and sync, static and dynamic, target-native hosted execution |
-| `x86_64-pc-windows-msvc` | supported | Base and sync, static and dynamic, target-native hosted execution |
-| `aarch64-pc-windows-msvc` | unclaimed | Build mappings remain, but target-native execution is deferred in [issue #4](https://github.com/tzekid/turso.zig/issues/4) |
-| Android | unclaimed | No Zig package assets, device/emulator execution, or platform contract |
-| iOS | unclaimed | No Zig XCFramework/package integration, signing contract, or device/simulator execution |
-| browser/WASM | unsupported | The SDK Kit C ABI is not a browser storage and event-loop contract |
+| Tier | Platform | Zig target | Rust target | Required evidence |
+| --- | --- | --- | --- | --- |
+| 1 | Linux x64, glibc | `x86_64-linux-gnu` | `x86_64-unknown-linux-gnu` | Full source/static suite, ABI exports, examples, source/system consumers |
+| 1 | macOS Apple Silicon | `aarch64-macos` | `aarch64-apple-darwin` | Source/static suite, ABI exports, source/system consumers |
+| 1 | Windows x64, MSVC | `x86_64-windows-msvc` | `x86_64-pc-windows-msvc` | Source/static suite, ABI exports, source/system consumers |
+| 2 | Linux ARM64, glibc | `aarch64-linux-gnu` | `aarch64-unknown-linux-gnu` | Source/static suite, ABI exports, clean consumer |
+| 3 | Windows ARM64, MSVC | `aarch64-windows-msvc` | `aarch64-pc-windows-msvc` | Scheduled native-toolchain, static artifact, ABI, safe API, and consumer probe |
 
-The release table in the README is the authoritative list of published target
-triples. A platform absent from that table should be treated as experimental
-even when `-Dnative=system` can consume a caller-supplied library.
+Tier 1 and Tier 2 are supported. Tier 3 is experimental and does not block
+changes while GitHub's `windows-11-arm` image remains a public preview and
+[issue #4](https://github.com/tzekid/turso.zig/issues/4) is being validated.
+Windows ARM64 promotion requires native Zig and Rust toolchains, bounded
+execution, and at least ten consecutive successful scheduled probes before
+dynamic, system, and sync coverage are added.
+
+The deliberately unsupported hosted matrix is:
+
+- macOS Intel;
+- Linux musl, on both x64 and ARM64;
+- Windows GNU/MinGW;
+- 32-bit platforms; and
+- any architecture not listed in the support table.
+
+Mappings may remain in `build.zig` for unsupported targets. Their presence is
+an escape hatch for externally configured toolchains, not a promise of CI,
+packaging, or support.
 
 ## Source and system native libraries
 
-Source mode infers Rust targets only for the explicit desktop and musl triples
-represented in `build.zig`. Cross compilation is rejected by default because
-Cargo also needs a matching linker, sysroot, and target-specific native
-dependencies.
+Source mode infers Rust targets for explicit triples represented in
+`build.zig`. Cross compilation is rejected by default because Cargo also needs
+a matching linker, sysroot, and target-specific native dependencies.
 `-Drust-target` plus `-Dallow-source-cross=true` is an explicit escape hatch for
 an externally configured toolchain, not a support claim.
 

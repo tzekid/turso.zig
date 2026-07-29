@@ -19,8 +19,8 @@ is pre-1.0.
   and fixed secret-free failure categories.
 - Added typed `mvcc_passive_checkpoint` feature configuration and complete
   deterministic rendering for every feature parsed by SDK Kit v0.7.1.
-- Added target-native Alpine 3.22 release packages for x86_64 and aarch64
-  Linux musl, covering base/sync SDK variants with static/dynamic linkage.
+- Added a bounded native Windows ARM64 preview workflow that records separate
+  toolchain, artifact, ABI, safe-API, and clean-consumer outcomes.
 - Added focused examples for persistent file databases, every SQL value kind
   and owned row copies, diagnostics, busy timeouts, and statement metadata.
 
@@ -40,9 +40,12 @@ is pre-1.0.
 - Renamed `FeatureSet.extra` to `unchecked_extra`; unchecked names must now be
   unique valid UTF-8 tokens and cannot duplicate any typed feature. Upstream
   may still ignore syntactically accepted unknown names.
-- Defined platform support by target-native package execution, documented the
-  work needed to promote Android/iOS, and kept browser/WASM explicitly outside
-  the native SDK Kit C ABI claim.
+- Defined a tiered target-native support contract: Linux x64, macOS ARM64, and
+  Windows x64 in Tier 1; Linux ARM64 in Tier 2; and experimental Windows ARM64
+  in Tier 3. macOS Intel and Linux musl are deliberately out of scope.
+- Split quick supported-platform CI, scheduled extended validation, Windows
+  ARM64 probing, and source-only release certification into bounded workflows.
+  Release archive smoke tests no longer run on every ordinary change.
 - Kept owner-count and active-handle bookkeeping checks fatal in every
   optimization mode, with dedicated Debug and ReleaseFast panic probes.
 
@@ -53,10 +56,10 @@ is pre-1.0.
   cancellation are also unavailable through that ABI.
 - Remote cipher selection and transform callbacks remain omitted until their
   upstream C conversion and callback paths are complete.
-- Release targets exclude Windows ARM64 while
-  [issue #4](https://github.com/tzekid/turso.zig/issues/4) is open, Android,
-  iOS, and browser/WASM. Sync evidence uses a real local `tursodb` server but
-  does not claim credentialed Turso Cloud coverage.
+- Release targets exclude experimental Windows ARM64 while
+  [issue #4](https://github.com/tzekid/turso.zig/issues/4) is open, macOS
+  Intel, Linux musl, Android, iOS, and browser/WASM. Sync evidence uses a real
+  local `tursodb` server but does not claim credentialed Turso Cloud coverage.
 
 ## [0.1.0] - 2026-07-27
 

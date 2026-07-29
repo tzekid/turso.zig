@@ -11,7 +11,6 @@ consumers have passed the target-native CI matrix.
 | turso.zig development version | `0.1.1` |
 | Zig | `0.16.0` |
 | Rust | `1.88` |
-| Musl package environment | Alpine `3.22`, musl `1.2.5`, image index `sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce` |
 | Turso crate | `0.7.1` |
 | Turso tag | `v0.7.1` |
 | Annotated tag object | `31cdceeb07d3b294e5b2f13b03cfdbbf59769b78` |
@@ -78,31 +77,31 @@ pull, apply, query, statistics, and checkpoint behavior with two clients.
 
 ## Required hosted checks
 
-Every job in `.github/workflows/ci.yml` must pass for the release commit:
+The release workflow reuses `.github/workflows/ci.yml`, so the following
+target-native gates must pass for the tagged commit:
 
-- native Debug and ReleaseSafe tests on Linux, macOS, and Windows;
-- x86_64 and aarch64 execution on Linux glibc, Linux musl, and macOS, plus
-  x86_64 on Windows;
-- source and system native-library modes;
-- static and dynamic linkage;
-- base and sync ABI manifests;
-- clean downstream consumers;
-- deterministic source and target-native package assembly;
-- extracted-package smoke tests and dynamic dependency inspection; and
-- the local-server sync round trip.
+- Linux x64 glibc, macOS ARM64, and Windows x64 MSVC Tier 1 lanes;
+- the Linux ARM64 glibc Tier 2 lane;
+- the canonical Linux functional suite;
+- default source/static linkage and clean source/system consumers;
+- base and sync ABI manifests; and
+- documentation, examples, ownership invariants, and provenance checks.
 
-The scheduled extended workflow records a deterministic lifecycle/fan-out soak.
-The drift workflow is advisory: it tests the wrapper against current Turso main
-and Zig master without changing release provenance.
+Before creating the tag, manually dispatch the extended workflow for the
+release commit. It owns dynamic/system linkage, feature variants, Valgrind,
+fault injection, the deterministic lifecycle/fan-out soak, and the local-server
+sync round trip. The drift workflow remains advisory.
 
-Targets absent from this matrix—including Android and iOS—are not release
-claims. Source-mode cross compilation is likewise not a support claim unless a
-complete target linker, sysroot, and native runtime proof are supplied. Musl
-assets are built and consumer-smoked target-natively in the pinned Alpine
-environment; dynamic archives require musl libc and `libgcc_s`.
-Windows ARM64 package policy exists in the tooling, but the hosted lane is
-disabled pending [issue #4](https://github.com/tzekid/turso.zig/issues/4), so
-Windows ARM64 assets are not part of the current release.
+The tagged release assembles only two platform-independent source packages:
+base and sync. It assembles each package twice, requires byte-identical output,
+smokes a clean extraction, and publishes it with a checksum sidecar. Native
+package tooling remains available for explicit experiments, but this project
+does not currently publish prebuilt native binaries.
+
+macOS Intel and Linux musl are out of scope. Windows ARM64 remains a Tier 3
+scheduled experiment pending [issue #4](https://github.com/tzekid/turso.zig/issues/4)
+and is not a release claim. Android, iOS, and browser/WASM are likewise absent
+from the release contract.
 
 ## ABI and package review
 
@@ -112,16 +111,15 @@ lists are necessary but not sufficient: `zig build test-abi` and
 `zig build test-sync-abi -Dsync=true` also compile C probes and compare public
 layouts, constants, and signatures.
 
-Release packages are assembled only by `tools/package-release.sh`. A base native
-package contains the Zig source, `turso.h`, one target's `turso_sdk_kit`
-library, wrapper and upstream notices, a provenance manifest, and checksums. A
-sync package substitutes `turso_sync_sdk_kit`, adds `turso_sync.h`, and records
-both symbol surfaces. Do not link both Rust SDK Kit libraries into one sync
-consumer.
+Release packages are assembled only by `tools/package-release.sh`. The base
+source package contains the Zig source, `turso.h`, wrapper and upstream notices,
+a provenance manifest, and checksums. The sync source package additionally
+contains `turso_sync.h`, `src/sync.zig`, and the sync symbol manifest.
 
-`tests/release-package.sh` is the integration wrapper. On Linux it can build
-two byte-identical source archives, assemble static and dynamic native archives,
-and run consumers from clean extractions:
+`tests/release-package.sh` remains the integration wrapper for manually
+rehearsing a future native package. On Linux it can build two byte-identical
+source archives, assemble static and dynamic native archives, and run consumers
+from clean extractions:
 
 ```sh
 tests/release-package.sh \
@@ -136,9 +134,8 @@ tests/release-package.sh \
   --ci-run-url https://github.com/OWNER/REPO/actions/runs/RUN_ID
 ```
 
-Pass `--sync` for the sync variant. The CI workflow is the reference for
-collecting `native-static-libs`, dynamic dependencies, minimum-platform
-metadata, and platform-specific library names.
+Pass `--sync` for the sync variant. Native packages produced this way are not
+release assets under the current support contract.
 
 ### Choosing an asset
 
@@ -149,30 +146,26 @@ source archive is the canonical fallback.
 | --- | --- |
 | Base source | `turso-zig-<version>-source.tar.gz` |
 | Sync source | `turso-zig-<version>-source-sync.tar.gz` |
-| Base native | `turso-zig-<version>-<target>-<static\|dynamic>-encryption-pure-rust-crypto.tar.gz` |
-| Sync native | `turso-zig-<version>-<target>-<static\|dynamic>-sync-pure-rust-crypto.tar.gz` |
 
-Select the exact target triple, base or sync ABI, and linkage needed by the
-consumer. Each native archive contains the Zig source, the matching header set,
-one selected SDK Kit runtime/static library, a Windows import library when
-needed, both projects' notices, `manifest.json`, and `checksums.sha256`.
-
-The release collector requires exactly 30 archives and 30 checksum
-sidecars: two source variants plus base/sync static/dynamic archives for seven
-target-native platforms.
+Each archive contains the appropriate Zig source and headers, both projects'
+notices, `manifest.json`, and `checksums.sha256`. Consumers build the pinned
+native SDK Kit for their supported target during the normal Zig build.
 
 ## Publication
 
 1. Update `CHANGELOG.md` and verify the package version in
    `build.zig.zon` and `src/version.zig`.
-2. Merge the release commit and require a green CI run on the default branch.
+2. Merge the release commit, require a green supported-platform run, and
+   manually run the extended workflow for that exact commit.
 3. Create an annotated `v<version>` tag pointing at that exact commit.
-4. Push the tag. Tag CI repeats the complete validation and creates the GitHub
-   Release from the package artifacts only after every required job passes.
+4. Push the tag. The release workflow repeats the supported-platform validation
+   and creates the GitHub Release from the two verified source packages only
+   after every required job passes.
 5. Download the public assets, verify their checksum sidecars, and run
    `tools/smoke-release.sh --archive <archive>` from a clean directory.
 
-Do not publish if provenance disagrees, a platform job is skipped, a native
-artifact embeds a checkout or cache path, required notices are missing, or a
-claimed target was not executed natively. Do not claim credentialed Turso Cloud
-coverage from the local-server suite; that remains an application-level canary.
+Do not publish if provenance disagrees, an applicable supported-platform job is
+skipped, an archive embeds a checkout or cache path, required notices are
+missing, or a claimed target was not executed natively. Do not claim
+credentialed Turso Cloud coverage from the local-server suite; that remains an
+application-level canary.

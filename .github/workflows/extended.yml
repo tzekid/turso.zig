@@ -95,4 +95,315 @@ jobs:
           name: linux-extended-soak-${{ github.run_id }}
           path: ${{ runner.temp }}/extended-evidence/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
+
+  linux-deep:
+    name: Linux x64 dynamic, system, feature, and fault validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust and diagnostics
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+          sudo apt-get update
+          sudo apt-get install --yes valgrind libc6-dbg
+
+      - name: Run dynamic and feature variants
+        run: |
+          zig build test \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=Debug \
+            -j2 \
+            --summary all
+          zig build test \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Dencryption=false \
+            -Doptimize=Debug \
+            -j2 \
+            --summary all
+          zig build test \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Dfts=true \
+            -Doptimize=Debug \
+            -j2 \
+            --summary all
+
+      - name: Run system-library static and dynamic suites
+        run: |
+          zig build native-artifact \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2
+          static_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.a"
+          zig build native-artifact \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2
+          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.so"
+          test -f "$static_lib"
+          test -f "$dynamic_lib"
+
+          prefix="$RUNNER_TEMP/turso-prefix"
+          mkdir -p "$prefix/lib"
+          cp "$static_lib" "$dynamic_lib" "$prefix/lib/"
+          zig build test \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=system \
+            -Dnative-path="$prefix" \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          LD_LIBRARY_PATH="$prefix/lib" zig build test \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=system \
+            -Dnative-path="$prefix" \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          tools/check-abi-symbols.sh "$static_lib" "$dynamic_lib"
+
+      - name: Inject filesystem faults
+        run: zig build test-disk-fault -j2 --summary all
+
+      - name: Run representative ownership lifecycles under Valgrind
+        run: tools/check-valgrind.sh -Dnative=source -Dlinkage=static -j2
+
+  linux-sync-e2e:
+    name: Linux x64 sync dynamic and local-server E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Run static and dynamic sync acceptance
+        run: |
+          zig build test-sync-abi \
+            -Dtarget=x86_64-linux-gnu \
+            -Dsync=true \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          zig build test-sync-abi \
+            -Dtarget=x86_64-linux-gnu \
+            -Dsync=true \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+
+      - name: Build the pinned local sync server
+        run: |
+          upstream_root=
+          for candidate in zig-pkg/*; do
+            if test -f "$candidate/sync/sdk-kit/Cargo.toml"; then
+              upstream_root=$candidate
+              break
+            fi
+          done
+          test -n "$upstream_root"
+          cargo build \
+            --locked \
+            -p turso_cli \
+            --bin tursodb \
+            --no-default-features \
+            --manifest-path "$upstream_root/Cargo.toml" \
+            --target-dir "$RUNNER_TEMP/turso-sync-server"
+          echo "SYNC_SERVER=$RUNNER_TEMP/turso-sync-server/debug/tursodb" >> "$GITHUB_ENV"
+
+      - name: Run push, bootstrap, pull, and apply E2E
+        run: |
+          zig build test-sync-e2e \
+            -Dtarget=x86_64-linux-gnu \
+            -Dsync=true \
+            -Dsync-server="$SYNC_SERVER" \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+
+  linux-arm-dynamic:
+    name: Linux ARM64 dynamic linkage
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Run and inspect the dynamic suite
+        run: |
+          zig build test \
+            -Dtarget=aarch64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          dynamic_lib=$(find .zig-cache/turso-cargo/turso_sdk_kit \
+            -type f -name libturso_sdk_kit.so -not -path '*/deps/*' -print -quit)
+          test -n "$dynamic_lib"
+          tools/check-abi-symbols.sh "$dynamic_lib"
+
+  macos-arm-dynamic:
+    name: macOS ARM64 dynamic and system linkage
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Run source and system dynamic suites
+        run: |
+          zig build native-artifact \
+            -Dtarget=aarch64-macos \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2
+          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.dylib"
+          test -f "$dynamic_lib"
+          tools/check-abi-symbols.sh "$dynamic_lib"
+          test "$(otool -D "$dynamic_lib" | tail -n 1)" = \
+            '@rpath/libturso_sdk_kit.dylib'
+
+          zig build test \
+            -Dtarget=aarch64-macos \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          prefix="$RUNNER_TEMP/turso-prefix"
+          mkdir -p "$prefix/lib"
+          cp "$dynamic_lib" "$prefix/lib/"
+          zig build test \
+            -Dtarget=aarch64-macos \
+            -Dnative=system \
+            -Dnative-path="$prefix" \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+
+  windows-x64-dynamic:
+    name: Windows x64 dynamic and system linkage
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Run source and system dynamic suites
+        run: |
+          export PATH="/c/Program Files/LLVM/bin:$PATH"
+          zig build native-artifact \
+            -Dtarget=x86_64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2
+          dll="$GITHUB_WORKSPACE/zig-out/bin/turso_sdk_kit.dll"
+          import_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.dll.lib"
+          test -f "$dll"
+          test -f "$import_lib"
+          tools/check-abi-symbols.sh "$dll"
+
+          PATH="$GITHUB_WORKSPACE/zig-out/bin:$PATH" zig build test \
+            -Dtarget=x86_64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          prefix="$RUNNER_TEMP/turso-prefix"
+          mkdir -p "$prefix/lib" "$prefix/bin"
+          cp "$import_lib" "$prefix/lib/"
+          cp "$dll" "$prefix/bin/"
+          PATH="$prefix/bin:$PATH" zig build test \
+            -Dtarget=x86_64-windows-msvc \
+            -Dnative=system \
+            -Dnative-path="$prefix" \
+            -Dlinkage=dynamic \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all

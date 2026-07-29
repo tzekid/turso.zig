@@ -101,8 +101,8 @@ Make the Zig migration one reviewable commit before changing Turso:
 
 1. promote the newest Zig `master` build to an exact recorded version;
 2. update build APIs and source syntax for that compiler;
-3. update all workflow installers, including direct Windows and musl download
-   paths that currently assume a stable release URL;
+3. update all workflow installers, including native ARM hosts and the Windows
+   ARM64 preview probe;
 4. update package, consumer, formatting, documentation, and release-tool
    version assertions; and
 5. require pure tests, native tests, examples, docs, and clean-consumer tests to
@@ -121,8 +121,8 @@ source and its promoted commit as immutable provenance:
    version checks, crate features, native dependencies, and notices;
 5. adapt the safe and sync layers for every reviewed ABI or behavior change;
    and
-6. pass the complete source/system, static/dynamic, base/sync, platform, soak,
-   fault, package, and local-server sync matrix.
+6. pass the supported-platform CI contract, scheduled dynamic/system, soak and
+   fault validation, source-package rehearsal, and local-server sync matrix.
 
 The Zig and Turso migrations stay separate so failures can be attributed to one
 moving upstream at a time.

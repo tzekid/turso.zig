@@ -31,28 +31,61 @@ FFI boundary.
 
 ## Hosted target matrix
 
-The blocking CI workflow runs target-native jobs rather than treating a cross
-compile as execution evidence.
+The blocking CI workflow runs a default source/static configuration
+target-natively rather than treating a cross compile as execution evidence.
+Functional behavior is exercised comprehensively once on Linux x64; the other
+lanes focus on platform linkage, ABI exports, and clean consumers.
 
-| Platform | Architectures | Required modes |
+| Tier | Platform | Required ordinary-CI evidence |
 | --- | --- | --- |
-| Linux glibc | x86_64, aarch64 | Debug/ReleaseSafe as configured; source/system; static/dynamic |
-| Linux musl (Alpine 3.22) | x86_64, aarch64 | ReleaseSafe base/sync packages; static/dynamic extracted consumers |
-| macOS | x86_64, aarch64 | Debug and ReleaseSafe; source/system; static/dynamic |
-| Windows MSVC native library | x86_64 | Debug and ReleaseSafe; source/system; static/dynamic |
+| 1 | Linux glibc x86_64 | Debug aggregate, examples, exact ABI, source/system consumers |
+| 1 | macOS ARM64 | ReleaseSafe aggregate, exact ABI, source/system consumers |
+| 1 | Windows x86_64 MSVC | ReleaseSafe aggregate, exact ABI, source/system consumers |
+| 2 | Linux glibc ARM64 | ReleaseSafe aggregate, exact ABI, source consumer |
 
 Windows jobs select the explicit Zig MSVC target that matches Cargo's native
 Rust triple. This prevents a GNU Zig executable from being linked to an MSVC
-static archive. Windows ARM64 mappings remain in the build and package tooling,
-but the hosted execution lane is disabled pending
-[issue #4](https://github.com/tzekid/turso.zig/issues/4). Compile-only support
-is not target-native evidence, so Windows ARM64 is not a current release claim.
+static archive.
+
+The scheduled extended workflow, rather than ordinary CI, owns:
+
+- source and system dynamic linkage on the supported operating systems;
+- Linux feature variants;
+- Valgrind and deterministic disk-fault injection;
+- long lifecycle and contention soaks; and
+- static/dynamic sync ABI plus the local-server sync round trip.
+
+This keeps expensive orthogonal combinations without multiplying them across
+every platform and every change.
+
+### Workflow ownership and budgets
+
+| Workflow | Trigger | Responsibility | Budget |
+| --- | --- | --- | --- |
+| `ci.yml` | Pull requests, pushes to `master`, manual/reusable call | Quick checks plus Tier 1/Tier 2 source/static compatibility | 10–20 minutes elapsed; no routine artifacts |
+| `extended.yml` | Weekly or manual | Dynamic/system linkage, features, faults, Valgrind, sync E2E, long soak | Bounded per job; seven-day diagnostics |
+| `windows-arm-preview.yml` | Weekly or manual | Tier 3 native ARM64 static promotion probe | 45-minute job cap; 10–15-minute stages |
+| `release.yml` | Version tags or manual rehearsal | Reuse supported CI, certify two source archives, publish tags | Release-only artifacts, seven-day workflow retention |
+| `drift.yml` | Weekly or manual | Advisory current-Turso and Zig-master compatibility | Seven-day diagnostics |
+
+Documentation-only changes still run the quick gate but skip native platform
+jobs. `Supported platforms` is the stable aggregate check to use for branch
+protection; it accepts intentionally skipped path-filtered jobs but fails if an
+applicable lane fails.
+
+The cleanup baseline was a 27-job run consuming approximately 466
+runner-minutes and 50 minutes elapsed, with about 245 runner-minutes spent on
+packages. Ordinary code changes should remain near 25–45 runner-minutes and
+10–20 minutes elapsed. A sustained regression above those bounds should be
+investigated before adding concurrency or restoring a matrix axis.
 
 Targets outside the blocking matrix are explicit non-claims:
 
 | Target | Current status | Evidence required before promotion |
 | --- | --- | --- |
-| Windows ARM64 | unclaimed | Resolve issue #4, then execute the base/sync static/dynamic package consumers target-natively |
+| Windows ARM64 | Tier 3 experimental | Ten consecutive native static probe passes, then staged dynamic/system/sync promotion |
+| macOS Intel | unsupported | Out of project scope |
+| Linux musl | unsupported | Out of project scope |
 | Android | unclaimed | Package the SDK Kit for a declared API level and run persistence/sync on device or emulator |
 | iOS | unclaimed | Package a device/simulator framework with a deployment/signing contract and execute both environments |
 | browser/WASM | unsupported | Supply the missing WASM driver, worker/OPFS host integration, and real-browser tests |
@@ -63,20 +96,11 @@ check protects API portability; it does not promote either platform. See
 [Platform boundaries](PLATFORMS.md) for the architectural and packaging
 requirements.
 
-Linux additionally runs:
-
-- deterministic source/static/dynamic package assembly and extraction;
-- target-native Alpine 3.22 base/sync package and consumer smokes on x86_64
-  and aarch64, with exact musl/libgcc dependency inspection;
-- an offline repeat build after the dependency graph has been fetched;
-- ABI export and ELF dependency checks;
-- Valgrind ownership smokes on x86_64;
-- deterministic disk-fault and soak tests;
-- the real loopback sync E2E test on x86_64.
-
-macOS and Windows package jobs validate architecture, native dependency
-metadata, import/runtime libraries, and clean extracted consumers. Every
-workflow action is pinned to an exact commit.
+Release jobs assemble the base and sync source archives twice, compare them
+byte-for-byte, reject dirty inputs and bad checksums, and build a consumer from
+the extracted archive. Native package tooling remains available for deliberate
+future work, but CI does not build or publish prebuilt native libraries.
+Every workflow action is pinned to an exact commit.
 
 ## Test layers
 
@@ -156,10 +180,10 @@ responsible for adversarial cleanup states and rotating authorization.
 A tagged release requires:
 
 1. a clean tree and consistent package/upstream provenance;
-2. all required jobs in `.github/workflows/ci.yml`;
+2. the reusable supported-platform workflow in `.github/workflows/ci.yml`;
 3. a successful manually dispatched extended soak for the release commit;
-4. deterministic package archives and clean extracted consumers;
-5. exact ABI symbol checks and platform-native dependency evidence;
+4. deterministic base and sync source archives and clean extracted consumers;
+5. exact ABI symbol checks on every supported native lane;
 6. generated API docs and public examples;
 7. downloaded-release checksum and consumer verification.
 
@@ -169,6 +193,7 @@ documented feature limits remain the public claims.
 
 Unsupported claims include source-mode cross compilation without an explicitly
 configured Cargo linker/sysroot, platforms absent from the target matrix,
-Windows ARM64 while issue #4 is open, Android/iOS application support,
-browser/WASM, caller-driven local async opening, query interruption, sync
-cancellation, remote cipher selection, and transform callbacks.
+Windows ARM64 release support while issue #4 remains experimental, macOS Intel,
+Linux musl, Android/iOS application support, browser/WASM, caller-driven local
+async opening, query interruption, sync cancellation, remote cipher selection,
+and transform callbacks.

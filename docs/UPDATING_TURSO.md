@@ -95,10 +95,10 @@ zig build test-sync-abi \
   --summary all
 ```
 
-Run the complete matrix in [TEST_MATRIX.md](TEST_MATRIX.md), including source
-and system modes, static and dynamic linkage, Debug and ReleaseSafe, feature
-variants, clean consumers, and native macOS/Windows/aarch64 execution. Build a
-matching local `tursodb` and run the sync E2E gate.
+Run the complete matrix in [TEST_MATRIX.md](TEST_MATRIX.md): required
+source/static checks on the supported native targets, scheduled dynamic/system
+and feature coverage, clean consumers, and the extended fault and soak gates.
+Build a matching local `tursodb` and run the sync E2E gate.
 
 Capture native static link requirements, dynamic dependencies, minimum libc/OS
 evidence, tool versions, checksums, and installed runtime lookup separately for

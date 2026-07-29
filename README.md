@@ -280,8 +280,9 @@ that needs them.
   because the pinned upstream C path does not implement them completely.
 - There are no published prebuilt binaries. The normal installation builds the
   native SDK Kit from source.
-- Android and iOS are not claimed. Browser/WASM is unsupported. Windows ARM64
-  is not currently part of the tested release matrix.
+- Android and iOS are not claimed. Browser/WASM, macOS Intel, and Linux musl
+  are unsupported. Windows ARM64 has an experimental scheduled native probe
+  and is not yet a release claim.
 
 This binding stays within the public SDK Kit C ABI. It does not bind private
 Rust layouts or symbols, so features available only to Turso's Rust-backed
@@ -407,20 +408,24 @@ For the symbol-level audit and deliberately omitted surfaces, see
 
 ## Platforms and validation
 
-The target-native CI and packaging matrix currently covers:
+The target-native support contract is intentionally small:
 
-| Platform | Architectures |
-| --- | --- |
-| Linux glibc | x86_64, aarch64 |
-| Linux musl | x86_64, aarch64 |
-| macOS | x86_64, aarch64 |
-| Windows MSVC | x86_64 |
+| Tier | Platform | Architecture | Status |
+| --- | --- | --- | --- |
+| 1 | Linux glibc | x86_64 | required |
+| 1 | macOS | ARM64 / Apple Silicon | required |
+| 1 | Windows MSVC | x86_64 | required |
+| 2 | Linux glibc | ARM64 | required, narrower compatibility gate |
+| 3 | Windows MSVC | ARM64 | scheduled experimental probe |
 
-Linux also runs fault injection, ownership checks under Valgrind,
-deterministic soak tests, package extraction tests, and a real two-client sync
-round trip through a local `tursodb` server. Fixture-backed tests exercise
-failure states and lifecycle edges that are difficult to force through the
-real library.
+Ordinary CI validates the default source/static configuration, exact ABI
+exports, and clean downstream consumers. Scheduled validation owns dynamic and
+system linkage, feature permutations, fault injection, Valgrind, deterministic
+soak tests, and the real two-client sync round trip through a local `tursodb`
+server. Release packaging is source-only; the extensive archive smoke checks
+run for tags and manual release rehearsals rather than for every change.
+Fixture-backed tests exercise failure states and lifecycle edges that are
+difficult to force through the real library.
 
 Useful local checks are:
 

@@ -1,0 +1,163 @@
+name: Windows ARM64 preview
+
+on:
+  schedule:
+    - cron: "23 5 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-arm-preview-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZIG_VERSION: 0.16.0
+  RUST_TOOLCHAIN: "1.88"
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  static-probe:
+    name: Tier 3 · Windows ARM64 native static probe
+    runs-on: windows-11-arm
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install native Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Install the native ARM64 Rust toolchain
+        shell: pwsh
+        run: |
+          $toolchain = "$env:RUST_TOOLCHAIN-aarch64-pc-windows-msvc"
+          rustup toolchain install $toolchain --profile minimal
+          rustup default $toolchain
+
+      - name: Prove that no x64 compiler emulation is in use
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne "ARM64") {
+            throw "Expected an ARM64 runner, got $env:PROCESSOR_ARCHITECTURE"
+          }
+
+          $zigEnvironment = (zig env | Out-String | ConvertFrom-Json)
+          if ($zigEnvironment.target -notmatch "^aarch64-windows") {
+            throw "Expected native ARM64 Zig, got $($zigEnvironment.target)"
+          }
+
+          $rustDetails = rustc -Vv | Out-String
+          if ($rustDetails -notmatch "host: aarch64-pc-windows-msvc") {
+            throw "Expected native ARM64 Rust:`n$rustDetails"
+          }
+
+          @(
+            "## Windows ARM64 toolchains"
+            ""
+            "- Runner architecture: ``$env:PROCESSOR_ARCHITECTURE``"
+            "- Zig target: ``$($zigEnvironment.target)``"
+            "- Rust host: ``aarch64-pc-windows-msvc``"
+            "- Tracking issue: https://github.com/tzekid/turso.zig/issues/4"
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+
+      - name: Run native-independent tests
+        id: pure
+        continue-on-error: true
+        timeout-minutes: 10
+        run: zig build test-pure -Doptimize=Debug --summary all
+
+      - name: Build one ReleaseSafe native static artifact
+        id: artifact
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          zig build native-artifact \
+            -Dtarget=aarch64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j1 \
+            --summary all
+          test -f zig-out/lib/turso_sdk_kit.lib
+
+      - name: Run the raw ABI probe
+        id: abi
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          zig build test-abi \
+            -Dtarget=aarch64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j1 \
+            --summary all
+
+      - name: Run the safe API suite
+        id: safe
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          zig build test-safe \
+            -Dtarget=aarch64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j1 \
+            --summary all
+
+      - name: Compile and run a clean consumer
+        id: consumer
+        continue-on-error: true
+        timeout-minutes: 15
+        working-directory: tests/consumer
+        run: |
+          zig build run \
+            --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+            -Dtarget=aarch64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j1
+
+      - name: Summarize and enforce the preview probe
+        if: always()
+        env:
+          PURE_OUTCOME: ${{ steps.pure.outcome }}
+          ARTIFACT_OUTCOME: ${{ steps.artifact.outcome }}
+          ABI_OUTCOME: ${{ steps.abi.outcome }}
+          SAFE_OUTCOME: ${{ steps.safe.outcome }}
+          CONSUMER_OUTCOME: ${{ steps.consumer.outcome }}
+        run: |
+          {
+            echo
+            echo "## Probe results"
+            echo
+            echo "| Stage | Outcome |"
+            echo "| --- | --- |"
+            echo "| Pure tests | $PURE_OUTCOME |"
+            echo "| Native static artifact | $ARTIFACT_OUTCOME |"
+            echo "| Raw ABI | $ABI_OUTCOME |"
+            echo "| Safe API | $SAFE_OUTCOME |"
+            echo "| Clean consumer | $CONSUMER_OUTCOME |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for outcome in \
+            "$PURE_OUTCOME" \
+            "$ARTIFACT_OUTCOME" \
+            "$ABI_OUTCOME" \
+            "$SAFE_OUTCOME" \
+            "$CONSUMER_OUTCOME"; do
+            test "$outcome" = success || exit 1
+          done

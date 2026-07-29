@@ -4,8 +4,8 @@ on:
   pull_request:
   push:
     branches: [master]
-    tags: ["v*"]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -24,10 +24,97 @@ defaults:
     shell: bash
 
 jobs:
-  format-pure-provenance:
-    name: Format, pure tests, provenance
+  changes:
+    name: Classify changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      sync: ${{ steps.classify.outputs.sync }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Select affected test groups
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          changed="$RUNNER_TEMP/changed-files.txt"
+          case "$EVENT_NAME" in
+            workflow_call|workflow_dispatch)
+              printf '%s\n' __all__ > "$changed"
+              ;;
+            pull_request)
+              git diff --name-only "$BASE_SHA" "$GITHUB_SHA" > "$changed"
+              ;;
+            push)
+              if test -z "$BEFORE_SHA" ||
+                  test "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ||
+                  ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+                printf '%s\n' __all__ > "$changed"
+              else
+                git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" > "$changed"
+              fi
+              ;;
+            *)
+              printf '%s\n' __all__ > "$changed"
+              ;;
+          esac
+
+          code=false
+          sync=false
+          while IFS= read -r path; do
+            test -n "$path" || continue
+            if test "$path" = __all__; then
+              code=true
+              sync=true
+              break
+            fi
+
+            case "$path" in
+              docs/*|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
+                ;;
+              *.md)
+                ;;
+              *)
+                code=true
+                ;;
+            esac
+
+            case "$path" in
+              build.zig|build.zig.zon|src/*|include/*|tests/*sync*|tools/check-sync-e2e.sh|.github/workflows/*)
+                sync=true
+                ;;
+            esac
+          done < "$changed"
+
+          {
+            echo "code=$code"
+            echo "sync=$sync"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Change classification"
+            echo
+            echo "- Code/platform checks: \`$code\`"
+            echo "- Sync checks: \`$sync\`"
+            echo
+            echo "<details><summary>Changed files</summary>"
+            echo
+            sed 's/^/- `/' "$changed" | sed 's/$/`/'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  quick:
+    name: Quick checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,7 +127,7 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
           use-cache: false
 
-      - name: Verify formatting
+      - name: Verify formatting and shell scripts
         run: |
           zig fmt --check build.zig src tests examples bench tools/*.zig
           bash -n tools/*.sh tests/release-package*.sh
@@ -54,7 +141,7 @@ jobs:
       - name: Build public API documentation
         run: zig build docs
 
-      - name: Check header manifest and pinned provenance
+      - name: Check ABI manifests and pinned provenance
         run: |
           tools/check-abi-symbols.sh --header-only
           tools/check-abi-symbols.sh --sync --header-only
@@ -69,38 +156,12 @@ jobs:
           grep -F '31cdceeb07d3b294e5b2f13b03cfdbbf59769b78' src/version.zig
           git diff --exit-code
 
-  linux-native:
-    name: Linux ${{ matrix.arch }} ${{ matrix.optimize }} source/system static/dynamic
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - optimize: Debug
-            arch: x86_64
-            runner: ubuntu-24.04
-            rust_target: x86_64-unknown-linux-gnu
-            profile: debug
-            evidence: x86_64-debug
-          - optimize: ReleaseSafe
-            arch: x86_64
-            runner: ubuntu-24.04
-            rust_target: x86_64-unknown-linux-gnu
-            profile: lib-release
-            evidence: x86_64-release-safe
-          - optimize: ReleaseSafe
-            arch: aarch64
-            runner: ubuntu-24.04-arm
-            rust_target: aarch64-unknown-linux-gnu
-            profile: lib-release
-            evidence: aarch64-release-safe
-          - optimize: Debug
-            arch: aarch64
-            runner: ubuntu-24.04-arm
-            rust_target: aarch64-unknown-linux-gnu
-            profile: debug
-            evidence: aarch64-debug
+  linux-x64:
+    name: Tier 1 · Linux x64
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -117,120 +178,58 @@ jobs:
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
-          rustc -Vv
-          cargo -V
 
-      - name: Source mode, static
-        run: zig build test -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: Inject ENOSPC and short-write faults
-        if: matrix.optimize == 'Debug' && matrix.arch == 'x86_64'
-        run: zig build test-disk-fault -j2 --summary all
-
-      - name: Compile and run public examples
-        if: matrix.optimize == 'Debug'
-        run: zig build examples -Dnative=source -Dlinkage=static -Doptimize=Debug -j2 --summary all
-
-      - name: Install Valgrind and glibc debug symbols
-        if: matrix.optimize == 'Debug' && matrix.arch == 'x86_64'
+      - name: Run the canonical functional suite
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes valgrind libc6-dbg
+          zig build test \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=Debug \
+            -j2 \
+            --summary all
+          zig build examples \
+            -Dtarget=x86_64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=Debug \
+            -j2 \
+            --summary all
 
-      - name: Valgrind representative ownership lifecycles
-        if: matrix.optimize == 'Debug' && matrix.arch == 'x86_64'
-        run: tools/check-valgrind.sh -Dnative=source -Dlinkage=static -j2
-
-      - name: Record same-command cache repeat
+      - name: Verify ABI and clean source/system consumers
         run: |
-          mkdir -p ci-evidence
-          { /usr/bin/time -p zig build test-abi -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all; } 2>&1 | tee ci-evidence/cache-repeat.txt
+          static_lib=$(find .zig-cache/turso-cargo/turso_sdk_kit \
+            -type f -name libturso_sdk_kit.a -not -path '*/deps/*' -print -quit)
+          test -n "$static_lib"
+          tools/check-abi-symbols.sh "$static_lib"
+          tools/check-readme-example.sh "$static_lib"
 
-      - name: Source mode, dynamic
-        run: zig build test -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: Source feature variants
-        if: matrix.optimize == 'Debug'
-        run: |
-          zig build test -Dnative=source -Dlinkage=dynamic -Dencryption=false -Doptimize=Debug -j2 --summary all
-          zig build test -Dnative=source -Dlinkage=dynamic -Dfts=true -Doptimize=Debug -j2 --summary all
-
-      - name: Verify source artifacts and ABI
-        id: native
-        run: |
-          native_dir="$GITHUB_WORKSPACE/.zig-cache/turso-cargo/turso_sdk_kit/${{ matrix.rust_target }}/${{ matrix.profile }}/encryption/${{ matrix.rust_target }}/${{ matrix.profile }}"
-          test -f "$native_dir/libturso_sdk_kit.a"
-          test -f "$native_dir/libturso_sdk_kit.so"
-          tools/check-abi-symbols.sh "$native_dir/libturso_sdk_kit.a" "$native_dir/libturso_sdk_kit.so"
-          echo "dir=$native_dir" >> "$GITHUB_OUTPUT"
-
-      - name: Compile the actual README Zig snippet
-        if: matrix.optimize == 'Debug'
-        env:
-          NATIVE_DIR: ${{ steps.native.outputs.dir }}
-        run: tools/check-readme-example.sh "$NATIVE_DIR/libturso_sdk_kit.a"
-
-      - name: Stage exact native artifacts as a system prefix
-        env:
-          NATIVE_DIR: ${{ steps.native.outputs.dir }}
-        run: |
           prefix="$RUNNER_TEMP/turso-prefix"
           mkdir -p "$prefix/lib"
-          cp "$NATIVE_DIR/libturso_sdk_kit.a" "$prefix/lib/"
-          cp "$NATIVE_DIR/libturso_sdk_kit.so" "$prefix/lib/"
-          echo "TURSO_PREFIX=$prefix" >> "$GITHUB_ENV"
+          cp "$static_lib" "$prefix/lib/"
+          (
+            cd tests/consumer
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=x86_64-linux-gnu \
+              -Dnative=source \
+              -Dlinkage=static \
+              -Doptimize=Debug \
+              -j2
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=x86_64-linux-gnu \
+              -Dnative=system \
+              -Dnative-path="$prefix" \
+              -Dlinkage=static \
+              -Doptimize=Debug \
+              -j2
+          )
 
-      - name: System mode, static
-        run: zig build test -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: System mode, dynamic
-        run: zig build test -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: Clean consumer, source/system static/dynamic
-        if: matrix.optimize == 'Debug' || matrix.arch == 'aarch64'
-        working-directory: tests/consumer
-        run: |
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=source -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=system -Dnative-path="$TURSO_PREFIX" -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }}
-
-      - name: Audit dynamic installation and write evidence
-        env:
-          NATIVE_DIR: ${{ steps.native.outputs.dir }}
-        run: |
-          rm -rf zig-out
-          zig build -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2
-          test -f zig-out/lib/libturso_sdk_kit.so
-          mkdir -p ci-evidence
-          sha256sum include/turso.h tests/expected-base-symbols.txt "$NATIVE_DIR/libturso_sdk_kit.a" "$NATIVE_DIR/libturso_sdk_kit.so" > ci-evidence/checksums.sha256
-          readelf -d zig-out/lib/libturso_sdk_kit.so > ci-evidence/dynamic-elf.txt
-          file "$NATIVE_DIR/libturso_sdk_kit.a" "$NATIVE_DIR/libturso_sdk_kit.so" > ci-evidence/file-types.txt
-          zig version > ci-evidence/zig-version.txt
-          rustc -Vv > ci-evidence/rust-version.txt
-          cargo -V > ci-evidence/cargo-version.txt
-          printf '%s\n' "upstream_tag=v0.7.1" "upstream_commit=4a88feb7caef869c16f6215b6dc51eafd5b3e54e" "header_sha256=14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb" > ci-evidence/provenance.txt
-
-      - name: Upload ABI and cache evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: linux-${{ matrix.evidence }}-evidence
-          path: ci-evidence/
-          if-no-files-found: error
-          retention-days: 14
-
-  linux-sync:
-    name: Linux ${{ matrix.arch }} sync source static/dynamic
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: ubuntu-24.04
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
+  macos-arm:
+    name: Tier 1 · macOS ARM64
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
+    runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -248,152 +247,49 @@ jobs:
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
 
-      - name: Run central fake sync acceptance gate with static linkage
-        run: zig build test-sync-abi -Dsync=true -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2 --summary all
-
-      - name: Run fake sync acceptance with dynamic linkage
-        run: zig build test-sync-abi -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j2 --summary all
-
-      - name: Verify the selected sync artifacts export base plus sync ABI only
+      - name: Run the native static suite
         run: |
-          static_lib=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -name libturso_sync_sdk_kit.a -not -path '*/deps/*' -print -quit)
-          dynamic_lib=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -name libturso_sync_sdk_kit.so -not -path '*/deps/*' -print -quit)
-          test -n "$static_lib"
-          test -n "$dynamic_lib"
-          tools/check-abi-symbols.sh --sync "$static_lib" "$dynamic_lib"
-
-      - name: Run push/bootstrap/pull/apply against a local tursodb server
-        if: matrix.arch == 'x86_64'
-        run: |
-          upstream_root=
-          for candidate in zig-pkg/*; do
-            if test -f "$candidate/sync/sdk-kit/Cargo.toml"; then
-              upstream_root=$candidate
-              break
-            fi
-          done
-          test -n "$upstream_root"
-          cargo build \
-            --locked \
-            -p turso_cli \
-            --bin tursodb \
-            --no-default-features \
-            --manifest-path "$upstream_root/Cargo.toml" \
-            --target-dir "$RUNNER_TEMP/turso-sync-server"
-          zig build test-sync-e2e \
-            -Dsync=true \
-            -Dsync-server="$RUNNER_TEMP/turso-sync-server/debug/tursodb" \
+          zig build test \
+            -Dtarget=aarch64-macos \
             -Dnative=source \
             -Dlinkage=static \
             -Doptimize=ReleaseSafe \
             -j2 \
             --summary all
 
-  macos-native:
-    name: macOS ${{ matrix.arch }} ${{ matrix.optimize }} native/system static/dynamic
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: aarch64
-            runner: macos-14
-            optimize: Debug
-          - arch: aarch64
-            runner: macos-14
-            optimize: ReleaseSafe
-          - arch: x86_64
-            runner: macos-15-intel
-            optimize: Debug
-          - arch: x86_64
-            runner: macos-15-intel
-            optimize: ReleaseSafe
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: ${{ env.ZIG_VERSION }}
-          use-cache: false
-
-      - name: Install pinned Rust toolchain
+      - name: Verify ABI and clean source/system consumers
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-          rustup default "$RUST_TOOLCHAIN"
-
-      - name: Run native static suite
-        run: zig build test -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: Run native dynamic suite
-        run: zig build test -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: Run target-native sync static and dynamic acceptance
-        if: matrix.optimize == 'ReleaseSafe'
-        run: |
-          zig build test-sync-abi -Dsync=true -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j2 --summary all
-          zig build test-sync-abi -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j2 --summary all
-          static_lib=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -name libturso_sync_sdk_kit.a -not -path '*/deps/*' -print -quit)
-          dynamic_lib=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -name libturso_sync_sdk_kit.dylib -not -path '*/deps/*' -print -quit)
+          static_lib=$(find .zig-cache/turso-cargo/turso_sdk_kit \
+            -type f -name libturso_sdk_kit.a -not -path '*/deps/*' -print -quit)
           test -n "$static_lib"
-          test -n "$dynamic_lib"
-          tools/check-abi-symbols.sh --sync "$static_lib" "$dynamic_lib"
+          tools/check-abi-symbols.sh "$static_lib"
 
-      - name: Check both native ABI artifacts
-        run: |
-          zig build native-artifact -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2
-          zig build native-artifact -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.a"
-          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/libturso_sdk_kit.dylib"
-          test -f "$static_lib"
-          test -f "$dynamic_lib"
-          tools/check-abi-symbols.sh "$static_lib" "$dynamic_lib"
-          test "$(otool -D "$dynamic_lib" | tail -n 1)" = '@rpath/libturso_sdk_kit.dylib'
           prefix="$RUNNER_TEMP/turso-prefix"
           mkdir -p "$prefix/lib"
-          cp "$static_lib" "$dynamic_lib" "$prefix/lib/"
-          echo "TURSO_PREFIX=$prefix" >> "$GITHUB_ENV"
+          cp "$static_lib" "$prefix/lib/"
+          (
+            cd tests/consumer
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=aarch64-macos \
+              -Dnative=source \
+              -Dlinkage=static \
+              -Doptimize=ReleaseSafe \
+              -j2
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=aarch64-macos \
+              -Dnative=system \
+              -Dnative-path="$prefix" \
+              -Dlinkage=static \
+              -Doptimize=ReleaseSafe \
+              -j2
+          )
 
-      - name: Run system static and dynamic suites
-        run: |
-          zig build test -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j2 --summary all
-          zig build test -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j2 --summary all
-
-      - name: Run clean source/system consumers
-        working-directory: tests/consumer
-        run: |
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }}
-
-  windows-native:
-    name: Windows ${{ matrix.arch }} ${{ matrix.optimize }} native/system static/dynamic
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: windows-2025
-            optimize: Debug
-            zig_target: x86_64-windows-msvc
-            source_cross_arg: ''
-            zig_jobs: 2
-            test_timeout_arg: ''
-          - arch: x86_64
-            runner: windows-2025
-            optimize: ReleaseSafe
-            zig_target: x86_64-windows-msvc
-            source_cross_arg: ''
-            zig_jobs: 2
-            test_timeout_arg: ''
-          # Windows aarch64 is disabled pending #4.
+  windows-x64:
+    name: Tier 1 · Windows x64 MSVC
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
+    runs-on: windows-2025
+    timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -401,145 +297,66 @@ jobs:
           persist-credentials: false
 
       - name: Install Zig
-        if: matrix.arch != 'aarch64'
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: ${{ env.ZIG_VERSION }}
-          # Cargo outputs live below .zig-cache; restoring that directory can
-          # mix native ABI/flag variants and has also produced corrupt caches.
           use-cache: false
-
-      - name: Install x86_64 Zig host binary under Windows ARM emulation
-        if: matrix.arch == 'aarch64'
-        shell: pwsh
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP "zig-x86_64-windows-$env:ZIG_VERSION.zip"
-          $extract = Join-Path $env:RUNNER_TEMP "zig-x86_64-host"
-          Invoke-WebRequest `
-            -Uri "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip" `
-            -OutFile $archive
-          $expected = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
-          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) { throw "Zig archive checksum mismatch: $actual" }
-          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
-          $zigDir = Join-Path $extract "zig-x86_64-windows-$env:ZIG_VERSION"
-          & (Join-Path $zigDir "zig.exe") version
-          $zigDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
 
-      - name: Run native static suite
-        run: zig build test -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
-
-      - name: Build dynamic package and expose its DLL for tests
+      - name: Run the native static suite
         run: |
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
-          dll="$GITHUB_WORKSPACE/zig-out/bin/turso_sdk_kit.dll"
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.lib"
-          import_lib="$GITHUB_WORKSPACE/zig-out/lib/turso_sdk_kit.dll.lib"
-          test -f "$dll"
-          test -f "$static_lib"
-          test -f "$import_lib"
+          zig build test \
+            -Dtarget=x86_64-windows-msvc \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+
+      - name: Verify ABI and clean source/system consumers
+        run: |
+          export PATH="/c/Program Files/LLVM/bin:$PATH"
+          static_lib=$(find .zig-cache/turso-cargo/turso_sdk_kit \
+            -type f -iname turso_sdk_kit.lib ! -iname '*.dll.lib' \
+            -not -path '*/deps/*' -print -quit)
+          test -n "$static_lib"
+          tools/check-abi-symbols.sh "$static_lib"
+
           prefix="$RUNNER_TEMP/turso-prefix"
-          mkdir -p "$prefix/lib" "$prefix/bin"
-          cp "$static_lib" "$import_lib" "$prefix/lib/"
-          cp "$dll" "$prefix/bin/"
-          cygpath -w "$prefix/bin" >> "$GITHUB_PATH"
-          {
-            echo "TURSO_DLL=$dll"
-            echo "TURSO_STATIC=$static_lib"
-            echo "TURSO_PREFIX=$prefix"
-          } >> "$GITHUB_ENV"
+          mkdir -p "$prefix/lib"
+          cp "$static_lib" "$prefix/lib/"
+          (
+            cd tests/consumer
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=x86_64-windows-msvc \
+              -Dnative=source \
+              -Dlinkage=static \
+              -Doptimize=ReleaseSafe \
+              -j2
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=x86_64-windows-msvc \
+              -Dnative=system \
+              -Dnative-path="$prefix" \
+              -Dlinkage=static \
+              -Doptimize=ReleaseSafe \
+              -j2
+          )
 
-      - name: Run native dynamic suite with Cargo DLL on PATH
-        run: zig build test -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
-
-      - name: Run target-native sync static and dynamic acceptance
-        if: matrix.optimize == 'ReleaseSafe'
-        run: |
-          export PATH="/c/Program Files/LLVM/bin:$PATH"
-          zig build test-sync-abi -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=static -Doptimize=ReleaseSafe -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
-          zig build -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j${{ matrix.zig_jobs }}
-          sync_dll=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -iname turso_sync_sdk_kit.dll -not -path '*/deps/*' -print -quit)
-          sync_static=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit -type f -iname turso_sync_sdk_kit.lib ! -iname '*.dll.lib' -not -path '*/deps/*' -print -quit)
-          test -n "$sync_dll"
-          test -n "$sync_static"
-          sync_bin=$(dirname "$sync_dll")
-          PATH="$sync_bin:$PATH" zig build test-sync-abi -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dsync=true -Dnative=source -Dlinkage=dynamic -Doptimize=ReleaseSafe -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
-          tools/check-abi-symbols.sh --sync "$sync_static" "$sync_dll"
-
-      - name: Check Windows export table
-        run: |
-          export PATH="/c/Program Files/LLVM/bin:$PATH"
-          tools/check-abi-symbols.sh "$TURSO_STATIC" "$TURSO_DLL"
-
-      - name: Run system static and dynamic suites
-        run: |
-          zig build test -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
-          zig build test -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }} ${{ matrix.test_timeout_arg }} --summary all
-
-      - name: Run clean source/system consumers
-        working-directory: tests/consumer
-        run: |
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=static -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
-          zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" -Dtarget=${{ matrix.zig_target }} -Dnative=system -Dnative-path="$TURSO_PREFIX" -Dlinkage=dynamic -Doptimize=${{ matrix.optimize }} -j${{ matrix.zig_jobs }}
-
-  release-package-linux:
-    name: Linux ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: ubuntu-24.04
-            rust_target: x86_64-unknown-linux-gnu
-            cpu_baseline: x86-64-v1
-            variant: base
-            build_sync_arg: ""
-            package_sync_arg: ""
-            sdk_name: turso_sdk_kit
-            features: encryption,pure-rust-crypto
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            rust_target: aarch64-unknown-linux-gnu
-            cpu_baseline: armv8-a
-            variant: base
-            build_sync_arg: ""
-            package_sync_arg: ""
-            sdk_name: turso_sdk_kit
-            features: encryption,pure-rust-crypto
-          - arch: x86_64
-            runner: ubuntu-24.04
-            rust_target: x86_64-unknown-linux-gnu
-            cpu_baseline: x86-64-v1
-            variant: sync
-            build_sync_arg: "-Dsync=true"
-            package_sync_arg: "--sync"
-            sdk_name: turso_sync_sdk_kit
-            features: pure-rust-crypto
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            rust_target: aarch64-unknown-linux-gnu
-            cpu_baseline: armv8-a
-            variant: sync
-            build_sync_arg: "-Dsync=true"
-            package_sync_arg: "--sync"
-            sdk_name: turso_sync_sdk_kit
-            features: pure-rust-crypto
+  linux-arm:
+    name: Tier 2 · Linux ARM64
+    if: needs.changes.outputs.code == 'true'
+    needs: changes
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -547,542 +364,113 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
           use-cache: false
 
-      - name: Install pinned Rust toolchain and packaging prerequisites
+      - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
-          sudo apt-get update
-          sudo apt-get install --yes jq
 
-      - name: Fetch and verify the exact annotated upstream tag
+      - name: Run the native static suite
         run: |
-          upstream="$RUNNER_TEMP/turso-upstream"
-          git clone --filter=blob:none --no-checkout https://github.com/tursodatabase/turso.git "$upstream"
-          git -C "$upstream" checkout --detach 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-          test "$(git -C "$upstream" rev-parse 'v0.7.1^{tag}')" = 31cdceeb07d3b294e5b2f13b03cfdbbf59769b78
-          test "$(git -C "$upstream" rev-parse 'v0.7.1^{commit}')" = 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-          echo "UPSTREAM_ROOT=$upstream" >> "$GITHUB_ENV"
+          zig build test \
+            -Dtarget=aarch64-linux-gnu \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
 
-      - name: Build remapped ReleaseSafe native artifacts
+      - name: Verify ABI and a clean consumer
         run: |
-          zig build native-artifact -Dnative=source -Dlinkage=static ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
-          zig build native-artifact -Dnative=source -Dlinkage=dynamic ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/lib${{ matrix.sdk_name }}.a"
-          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/lib${{ matrix.sdk_name }}.so"
-          test -f "$static_lib"
-          test -f "$dynamic_lib"
-          echo "STATIC_LIBRARY=$static_lib" >> "$GITHUB_ENV"
-          echo "DYNAMIC_LIBRARY=$dynamic_lib" >> "$GITHUB_ENV"
-
-      - name: Capture target-native dependency evidence
-        run: |
-          evidence_dir="$RUNNER_TEMP/ci-evidence"
-          mkdir -p "$evidence_dir"
-          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
-          static_log="$RUNNER_TEMP/native-static-libs.log"
+          static_lib=$(find .zig-cache/turso-cargo/turso_sdk_kit \
+            -type f -name libturso_sdk_kit.a -not -path '*/deps/*' -print -quit)
+          test -n "$static_lib"
+          tools/check-abi-symbols.sh "$static_lib"
           (
-            cd "$UPSTREAM_ROOT"
-            cargo rustc --locked -p ${{ matrix.sdk_name }} --lib --profile lib-release \
-              --target ${{ matrix.rust_target }} --target-dir "$RUNNER_TEMP/cargo-evidence" \
-              --no-default-features --features ${{ matrix.features }} \
-              -- --print native-static-libs
-          ) 2>&1 | tee "$static_log"
-          static_output=$(sed -n 's/.*native-static-libs: //p' "$static_log" | tail -1)
-          test -n "$static_output"
-          printf '%s\n' \
-            'command=cargo rustc -p ${{ matrix.sdk_name }} --lib --locked -- --print native-static-libs' \
-            'target=${{ matrix.rust_target }}' \
-            "output=$static_output" > "$evidence_dir/native-static-libs.txt"
-          required=$(readelf -d "$DYNAMIC_LIBRARY" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | paste -sd, -)
-          test -n "$required"
-          unexpected=$(printf '%s' "$required" | tr ',' '\n' | grep -Ev '^(libgcc_s\.so\.1|libm\.so\.6|libc\.so\.6|ld-linux-x86-64\.so\.2|ld-linux-aarch64\.so\.1)$' || true)
-          test -z "$unexpected"
-          glibc_max=$(readelf --version-info "$DYNAMIC_LIBRARY" | sed -n 's/.*Name: GLIBC_\([^ ]*\).*/\1/p' | sort -V | tail -1)
-          test -n "$glibc_max"
-          dpkg --compare-versions "$glibc_max" le 2.39
-          printf '%s\n' \
-            'command=readelf -d lib${{ matrix.sdk_name }}.so' \
-            'target=${{ matrix.rust_target }}' \
-            "required=$required" \
-            "glibc_max=$glibc_max" > "$evidence_dir/native-dynamic-deps.txt"
+            cd tests/consumer
+            zig build run --cache-dir "$GITHUB_WORKSPACE/.zig-cache" \
+              -Dtarget=aarch64-linux-gnu \
+              -Dnative=source \
+              -Dlinkage=static \
+              -Doptimize=ReleaseSafe \
+              -j2
+          )
 
-      - name: Assemble twice and smoke extracted source/static/dynamic archives
-        run: |
-          tests/release-package.sh ${{ matrix.package_sync_arg }} \
-            --upstream-root "$UPSTREAM_ROOT" \
-            --static "$STATIC_LIBRARY" \
-            --dynamic "$DYNAMIC_LIBRARY" \
-            --static-deps "$EVIDENCE_DIR/native-static-libs.txt" \
-            --dynamic-deps "$EVIDENCE_DIR/native-dynamic-deps.txt" \
-            --target ${{ matrix.rust_target }} \
-            --cpu-baseline ${{ matrix.cpu_baseline }} \
-            --minimum-platform 'ubuntu-24.04 glibc>=2.35' \
-            --ci-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --work-root "$RUNNER_TEMP/release-work"
-          mkdir -p "$EVIDENCE_DIR/packages"
-          find "$RUNNER_TEMP/release-work" -maxdepth 2 -type f \
-            \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.json' \) \
-            -exec cp {} "$EVIDENCE_DIR/packages/" \;
-          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -eq 3
-
-      - name: Upload package evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: linux-${{ matrix.arch }}-${{ matrix.variant }}-release-package-evidence
-          path: ${{ runner.temp }}/ci-evidence/
-          if-no-files-found: error
-          retention-days: 14
-
-  release-package-musl:
-    name: Linux musl ${{ matrix.arch }} ${{ matrix.variant }} target-native package smoke
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: ubuntu-24.04
-            variant: base
-          - arch: x86_64
-            runner: ubuntu-24.04
-            variant: sync
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            variant: base
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            variant: sync
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Build and smoke in the pinned target-native musl environment
-        env:
-          MUSL_ARCH: ${{ matrix.arch }}
-          SDK_VARIANT: ${{ matrix.variant }}
-          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          work_root="$RUNNER_TEMP/musl-${MUSL_ARCH}-${SDK_VARIANT}"
-          mkdir -p "$work_root"
-          docker run --rm \
-            --name "turso-zig-musl-${MUSL_ARCH}-${SDK_VARIANT}" \
-            --cpus 2 \
-            --memory 12g \
-            --env MUSL_ARCH \
-            --env SDK_VARIANT \
-            --env CI_RUN_URL \
-            --volume "$GITHUB_WORKSPACE:/source:ro" \
-            --volume "$work_root:/work" \
-            alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
-            sh -euxc '
-              apk add --no-cache \
-                bash binutils build-base ca-certificates coreutils curl \
-                file findutils git gzip jq rustup tar xz
-              exec bash /source/tests/release-package-musl.sh \
-                --arch "$MUSL_ARCH" \
-                --variant "$SDK_VARIANT" \
-                --source-root /source \
-                --work-root /work/build \
-                --ci-run-url "$CI_RUN_URL"
-            '
-
-      - name: Upload musl packages and evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: linux-musl-${{ matrix.arch }}-${{ matrix.variant }}-release-package-evidence
-          path: ${{ runner.temp }}/musl-${{ matrix.arch }}-${{ matrix.variant }}/build/upload/
-          if-no-files-found: error
-          retention-days: 14
-
-  release-package-macos:
-    name: macOS ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: aarch64
-            runner: macos-14
-            rust_target: aarch64-apple-darwin
-            cpu_baseline: armv8-a
-            variant: base
-            build_sync_arg: ""
-            package_sync_arg: ""
-            sdk_name: turso_sdk_kit
-            features: encryption,pure-rust-crypto
-          - arch: aarch64
-            runner: macos-14
-            rust_target: aarch64-apple-darwin
-            cpu_baseline: armv8-a
-            variant: sync
-            build_sync_arg: "-Dsync=true"
-            package_sync_arg: "--sync"
-            sdk_name: turso_sync_sdk_kit
-            features: pure-rust-crypto
-          - arch: x86_64
-            runner: macos-15-intel
-            rust_target: x86_64-apple-darwin
-            cpu_baseline: x86-64-v1
-            variant: base
-            build_sync_arg: ""
-            package_sync_arg: ""
-            sdk_name: turso_sdk_kit
-            features: encryption,pure-rust-crypto
-          - arch: x86_64
-            runner: macos-15-intel
-            rust_target: x86_64-apple-darwin
-            cpu_baseline: x86-64-v1
-            variant: sync
-            build_sync_arg: "-Dsync=true"
-            package_sync_arg: "--sync"
-            sdk_name: turso_sync_sdk_kit
-            features: pure-rust-crypto
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: ${{ env.ZIG_VERSION }}
-          use-cache: false
-
-      - name: Install pinned Rust and packaging tools
-        run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-          rustup default "$RUST_TOOLCHAIN"
-          brew install coreutils gnu-tar jq
-          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
-          echo "$(brew --prefix gnu-tar)/libexec/gnubin" >> "$GITHUB_PATH"
-
-      - name: Fetch and verify exact upstream tag
-        run: |
-          upstream="$RUNNER_TEMP/turso-upstream"
-          git clone --filter=blob:none --no-checkout https://github.com/tursodatabase/turso.git "$upstream"
-          git -C "$upstream" checkout --detach 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-          test "$(git -C "$upstream" rev-parse 'v0.7.1^{tag}')" = 31cdceeb07d3b294e5b2f13b03cfdbbf59769b78
-          test "$(git -C "$upstream" rev-parse 'v0.7.1^{commit}')" = 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-          echo "UPSTREAM_ROOT=$upstream" >> "$GITHUB_ENV"
-
-      - name: Build ReleaseSafe native libraries
-        run: |
-          zig build native-artifact -Dnative=source -Dlinkage=static ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
-          zig build native-artifact -Dnative=source -Dlinkage=dynamic ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/lib${{ matrix.sdk_name }}.a"
-          dynamic_lib="$GITHUB_WORKSPACE/zig-out/lib/lib${{ matrix.sdk_name }}.dylib"
-          test -f "$static_lib"
-          test -f "$dynamic_lib"
-          echo "STATIC_LIBRARY=$static_lib" >> "$GITHUB_ENV"
-          echo "DYNAMIC_LIBRARY=$dynamic_lib" >> "$GITHUB_ENV"
-
-      - name: Capture target-native dependency and platform evidence
-        run: |
-          evidence_dir="$RUNNER_TEMP/package-evidence"
-          mkdir -p "$evidence_dir"
-          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
-          static_log="$evidence_dir/native-static-libs.log"
-          (
-            cd "$UPSTREAM_ROOT"
-            cargo rustc --locked -p ${{ matrix.sdk_name }} --lib --profile lib-release \
-              --target ${{ matrix.rust_target }} --target-dir "$RUNNER_TEMP/cargo-evidence" \
-              --no-default-features --features ${{ matrix.features }} \
-              -- --print native-static-libs
-          ) 2>&1 | tee "$static_log"
-          static_output=$(sed -n 's/.*native-static-libs: //p' "$static_log" | tail -1)
-          test -n "$static_output"
-          printf '%s\n' \
-            'command=cargo rustc -p ${{ matrix.sdk_name }} --lib --locked -- --print native-static-libs' \
-            'target=${{ matrix.rust_target }}' \
-            "output=$static_output" > "$evidence_dir/native-static-libs.txt"
-          otool -L "$DYNAMIC_LIBRARY" > "$evidence_dir/otool.txt"
-          # Line one names the inspected file and line two is LC_ID_DYLIB.
-          # Package evidence records only the actual load dependencies.
-          required=$(tail -n +3 "$evidence_dir/otool.txt" | awk '{print $1}' | paste -sd, -)
-          test -n "$required"
-          install_name=$(otool -D "$DYNAMIC_LIBRARY" | tail -n 1)
-          test "$install_name" = '@rpath/lib${{ matrix.sdk_name }}.dylib'
-          printf '%s\n' \
-            'command=otool -L lib${{ matrix.sdk_name }}.dylib' \
-            'target=${{ matrix.rust_target }}' \
-            "install_name=$install_name" \
-            "required=$required" > "$evidence_dir/native-dynamic-deps.txt"
-          minos=$(otool -l "$DYNAMIC_LIBRARY" | awk '
-            /LC_BUILD_VERSION/ { build = 1; next }
-            build && /minos/ { print $2; exit }
-            /LC_VERSION_MIN_MACOSX/ { legacy = 1; next }
-            legacy && /version/ { print $2; exit }
-          ')
-          test -n "$minos"
-          echo "MINIMUM_PLATFORM=macOS-$minos" >> "$GITHUB_ENV"
-
-      - name: Assemble twice and smoke extracted native archives
-        run: |
-          tests/release-package.sh ${{ matrix.package_sync_arg }} --skip-source \
-            --upstream-root "$UPSTREAM_ROOT" \
-            --work-root "$RUNNER_TEMP/release-work" \
-            --static "$STATIC_LIBRARY" \
-            --dynamic "$DYNAMIC_LIBRARY" \
-            --static-deps "$EVIDENCE_DIR/native-static-libs.txt" \
-            --dynamic-deps "$EVIDENCE_DIR/native-dynamic-deps.txt" \
-            --target ${{ matrix.rust_target }} \
-            --cpu-baseline ${{ matrix.cpu_baseline }} \
-            --minimum-platform "$MINIMUM_PLATFORM" \
-            --ci-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          mkdir -p "$EVIDENCE_DIR/packages"
-          find "$RUNNER_TEMP/release-work" -maxdepth 2 -type f \
-            \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.json' \) \
-            -exec cp {} "$EVIDENCE_DIR/packages/" \;
-          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -eq 2
-
-      - name: Upload macOS packages and evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: macos-${{ matrix.arch }}-${{ matrix.variant }}-release-packages
-          path: ${{ runner.temp }}/package-evidence/
-          if-no-files-found: error
-          retention-days: 14
-
-  release-package-windows:
-    name: Windows ${{ matrix.arch }} ${{ matrix.variant }} deterministic release package smoke
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: windows-2025
-            rust_target: x86_64-pc-windows-msvc
-            zig_target: x86_64-windows-msvc
-            cpu_baseline: x86-64-v1
-            source_cross_arg: ''
-            variant: base
-            build_sync_arg: ""
-            package_sync_arg: ""
-            sdk_name: turso_sdk_kit
-            features: encryption,pure-rust-crypto
-          - arch: x86_64
-            runner: windows-2025
-            rust_target: x86_64-pc-windows-msvc
-            zig_target: x86_64-windows-msvc
-            cpu_baseline: x86-64-v1
-            source_cross_arg: ''
-            variant: sync
-            build_sync_arg: "-Dsync=true"
-            package_sync_arg: "--sync"
-            sdk_name: turso_sync_sdk_kit
-            features: pure-rust-crypto
-          # Windows aarch64 remains disabled pending
-          # https://github.com/tzekid/turso.zig/issues/4.
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Install Zig
-        if: matrix.arch != 'aarch64'
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: ${{ env.ZIG_VERSION }}
-          use-cache: false
-
-      - name: Install x86_64 Zig host binary under Windows ARM emulation
-        if: matrix.arch == 'aarch64'
-        shell: pwsh
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP "zig-x86_64-windows-$env:ZIG_VERSION.zip"
-          $extract = Join-Path $env:RUNNER_TEMP "zig-x86_64-host"
-          Invoke-WebRequest `
-            -Uri "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip" `
-            -OutFile $archive
-          $expected = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
-          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) { throw "Zig archive checksum mismatch: $actual" }
-          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
-          $zigDir = Join-Path $extract "zig-x86_64-windows-$env:ZIG_VERSION"
-          & (Join-Path $zigDir "zig.exe") version
-          $zigDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install pinned Rust and packaging tools
-        run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-          rustup default "$RUST_TOOLCHAIN"
-          choco install jq --no-progress --yes
-          export PATH="/c/Program Files/LLVM/bin:$PATH"
-          for command in jq sha256sum realpath tar gzip file strings llvm-readobj; do
-            command -v "$command"
-          done
-          tar --version | head -1 | grep -F 'GNU tar'
-
-      - name: Fetch and verify exact upstream tag
-        run: |
-          upstream="$RUNNER_TEMP/turso-upstream"
-          git clone --filter=blob:none --no-checkout https://github.com/tursodatabase/turso.git "$upstream"
-          git -C "$upstream" checkout --detach 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-          test "$(git -C "$upstream" rev-parse 'v0.7.1^{tag}')" = 31cdceeb07d3b294e5b2f13b03cfdbbf59769b78
-          test "$(git -C "$upstream" rev-parse 'v0.7.1^{commit}')" = 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-          echo "UPSTREAM_ROOT=$upstream" >> "$GITHUB_ENV"
-
-      - name: Build ReleaseSafe native libraries
-        run: |
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=static ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
-          zig build native-artifact -Dtarget=${{ matrix.zig_target }} ${{ matrix.source_cross_arg }} -Dnative=source -Dlinkage=dynamic ${{ matrix.build_sync_arg }} -Doptimize=ReleaseSafe -j2
-          static_lib="$GITHUB_WORKSPACE/zig-out/lib/${{ matrix.sdk_name }}.lib"
-          import_lib="$GITHUB_WORKSPACE/zig-out/lib/${{ matrix.sdk_name }}.dll.lib"
-          dynamic_lib="$GITHUB_WORKSPACE/zig-out/bin/${{ matrix.sdk_name }}.dll"
-          test -f "$static_lib"
-          test -f "$import_lib"
-          test -f "$dynamic_lib"
-          {
-            echo "STATIC_LIBRARY=$static_lib"
-            echo "IMPORT_LIBRARY=$import_lib"
-            echo "DYNAMIC_LIBRARY=$dynamic_lib"
-          } >> "$GITHUB_ENV"
-
-      - name: Capture target-native dependency and platform evidence
-        run: |
-          export PATH="/c/Program Files/LLVM/bin:$PATH"
-          evidence_dir="$RUNNER_TEMP/package-evidence"
-          mkdir -p "$evidence_dir"
-          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
-          static_log="$evidence_dir/native-static-libs.log"
-          (
-            cd "$UPSTREAM_ROOT"
-            cargo rustc --locked -p ${{ matrix.sdk_name }} --lib --profile lib-release \
-              --target ${{ matrix.rust_target }} --target-dir "$RUNNER_TEMP/cargo-evidence" \
-              --no-default-features --features ${{ matrix.features }} \
-              -- --print native-static-libs
-          ) 2>&1 | tee "$static_log"
-          static_output=$(sed -n 's/.*native-static-libs: //p' "$static_log" | tail -1)
-          test -n "$static_output"
-          printf '%s\n' \
-            'command=cargo rustc -p ${{ matrix.sdk_name }} --lib --locked -- --print native-static-libs' \
-            'target=${{ matrix.rust_target }}' \
-            "output=$static_output" > "$evidence_dir/native-static-libs.txt"
-          llvm-readobj --coff-imports "$DYNAMIC_LIBRARY" > "$evidence_dir/coff-imports.txt"
-          required=$(sed -n 's/^[[:space:]]*Name: //p' "$evidence_dir/coff-imports.txt" | sort -u | paste -sd, -)
-          test -n "$required"
-          printf '%s\n' \
-            'command=llvm-readobj --coff-imports ${{ matrix.sdk_name }}.dll' \
-            'target=${{ matrix.rust_target }}' \
-            "required=$required" > "$evidence_dir/native-dynamic-deps.txt"
-          llvm-readobj --file-headers "$DYNAMIC_LIBRARY" > "$evidence_dir/file-headers.txt"
-          subsystem_major=$(sed -n 's/.*MajorSubsystemVersion: //p' "$evidence_dir/file-headers.txt" | head -1)
-          subsystem_minor=$(sed -n 's/.*MinorSubsystemVersion: //p' "$evidence_dir/file-headers.txt" | head -1)
-          test -n "$subsystem_major"
-          test -n "$subsystem_minor"
-          echo "MINIMUM_PLATFORM=Windows-$subsystem_major.$subsystem_minor" >> "$GITHUB_ENV"
-
-      - name: Assemble twice and smoke extracted native archives
-        run: |
-          export PATH="/c/Program Files/LLVM/bin:$PATH"
-          tests/release-package.sh ${{ matrix.package_sync_arg }} --skip-source \
-            --upstream-root "$UPSTREAM_ROOT" \
-            --work-root "$RUNNER_TEMP/release-work" \
-            --static "$STATIC_LIBRARY" \
-            --dynamic "$DYNAMIC_LIBRARY" \
-            --import-library "$IMPORT_LIBRARY" \
-            --static-deps "$EVIDENCE_DIR/native-static-libs.txt" \
-            --dynamic-deps "$EVIDENCE_DIR/native-dynamic-deps.txt" \
-            --target ${{ matrix.rust_target }} \
-            --cpu-baseline ${{ matrix.cpu_baseline }} \
-            --minimum-platform "$MINIMUM_PLATFORM" \
-            --ci-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          mkdir -p "$EVIDENCE_DIR/packages"
-          find "$RUNNER_TEMP/release-work" -maxdepth 2 -type f \
-            \( -name '*.tar.gz' -o -name '*.sha256' -o -name '*.json' \) \
-            -exec cp {} "$EVIDENCE_DIR/packages/" \;
-          test "$(find "$EVIDENCE_DIR/packages" -type f -name '*.tar.gz' | wc -l)" -eq 2
-
-      - name: Upload Windows packages and evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: windows-${{ matrix.arch }}-${{ matrix.variant }}-release-packages
-          path: ${{ runner.temp }}/package-evidence/
-          if-no-files-found: error
-          retention-days: 14
-
-  publish-release:
-    name: Publish verified tag
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs:
-      - format-pure-provenance
-      - linux-native
-      - linux-sync
-      - macos-native
-      - windows-native
-      - release-package-linux
-      - release-package-musl
-      - release-package-macos
-      - release-package-windows
+  sync:
+    name: Sync · Linux x64
+    if: needs.changes.outputs.sync == 'true'
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      contents: write
     steps:
-      - name: Check out annotated tag
+      - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
 
-      - name: Verify tag and package version
-        run: |
-          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
-          package_version=$(sed -n 's/^[[:space:]]*\.version = "\([^"]*\)",/\1/p' build.zig.zon)
-          test -n "$package_version"
-          test "$GITHUB_REF_NAME" = "v$package_version"
-
-      - name: Download target-native packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          pattern: "*release-package*"
-          path: release-inputs
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
 
-      - name: Collect unique release assets
+      - name: Install pinned Rust toolchain
         run: |
-          mkdir -p dist
-          while IFS= read -r -d '' asset; do
-            case "$asset" in
-              *.tar.gz|*.tar.gz.sha256) ;;
-              *) continue ;;
-            esac
-            destination="dist/${asset##*/}"
-            if test -f "$destination"; then
-              cmp "$asset" "$destination"
-            else
-              cp "$asset" "$destination"
-            fi
-          done < <(find release-inputs -type f -print0)
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 30
-          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz.sha256' | wc -l)" -eq 30
-          for checksum in dist/*.tar.gz.sha256; do
-            (
-              cd dist
-              sha256sum --check "${checksum##*/}"
-            )
-          done
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
 
-      - name: Create or refresh GitHub Release
+      - name: Run deterministic and native sync acceptance
+        run: |
+          zig build test-sync-workflows \
+            -Dsync=true \
+            -Doptimize=ReleaseSafe \
+            --summary all
+          zig build test-sync-abi \
+            -Dtarget=x86_64-linux-gnu \
+            -Dsync=true \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
+          static_lib=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit \
+            -type f -name libturso_sync_sdk_kit.a -not -path '*/deps/*' -print -quit)
+          test -n "$static_lib"
+          tools/check-abi-symbols.sh --sync "$static_lib"
+
+  supported-platforms:
+    name: Supported platforms
+    if: always()
+    needs:
+      - changes
+      - quick
+      - linux-x64
+      - macos-arm
+      - windows-x64
+      - linux-arm
+      - sync
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable support gate
         env:
-          GH_TOKEN: ${{ github.token }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          QUICK_RESULT: ${{ needs.quick.result }}
+          LINUX_X64_RESULT: ${{ needs.linux-x64.result }}
+          MACOS_ARM_RESULT: ${{ needs.macos-arm.result }}
+          WINDOWS_X64_RESULT: ${{ needs.windows-x64.result }}
+          LINUX_ARM_RESULT: ${{ needs.linux-arm.result }}
+          SYNC_RESULT: ${{ needs.sync.result }}
         run: |
-          mapfile -d '' assets < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --verify-tag \
-              --title "turso.zig $GITHUB_REF_NAME" \
-              --generate-notes
-          fi
+          test "$CHANGES_RESULT" = success
+          test "$QUICK_RESULT" = success
+          for result in \
+            "$LINUX_X64_RESULT" \
+            "$MACOS_ARM_RESULT" \
+            "$WINDOWS_X64_RESULT" \
+            "$LINUX_ARM_RESULT" \
+            "$SYNC_RESULT"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "applicable support gate failed: $result" >&2; exit 1 ;;
+            esac
+          done
