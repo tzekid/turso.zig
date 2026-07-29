@@ -321,8 +321,8 @@ jobs:
 
       - name: Run source and system dynamic suites
         run: |
+          # Keep these native so Zig discovers the hosted runner's Apple SDK.
           zig build native-artifact \
-            -Dtarget=aarch64-macos \
             -Dnative=source \
             -Dlinkage=dynamic \
             -Doptimize=ReleaseSafe \
@@ -334,7 +334,6 @@ jobs:
             '@rpath/libturso_sdk_kit.dylib'
 
           zig build test \
-            -Dtarget=aarch64-macos \
             -Dnative=source \
             -Dlinkage=dynamic \
             -Doptimize=ReleaseSafe \
@@ -344,7 +343,6 @@ jobs:
           mkdir -p "$prefix/lib"
           cp "$dynamic_lib" "$prefix/lib/"
           zig build test \
-            -Dtarget=aarch64-macos \
             -Dnative=system \
             -Dnative-path="$prefix" \
             -Dlinkage=dynamic \
