@@ -14,6 +14,26 @@ use. A Zig program can open an in-memory or local file database without running
 a separate database server. Remote synchronization is available as an opt-in
 module.
 
+## Contents
+
+- [Project status](#project-status)
+- [Install](#install)
+- [First program](#first-program)
+- [Common tasks](#common-tasks)
+  - [Bind values instead of formatting SQL](#bind-values-instead-of-formatting-sql)
+  - [Decode a row into a struct](#decode-a-row-into-a-struct)
+  - [Use a transaction](#use-a-transaction)
+- [Runnable examples](#runnable-examples)
+- [What is available](#what-is-available)
+- [Limits and expectations](#limits-and-expectations)
+- [Optional remote sync](#optional-remote-sync)
+- [Ownership basics](#ownership-basics)
+- [Build options](#build-options)
+- [SDK Kit coverage](#sdk-kit-coverage)
+- [Platforms and validation](#platforms-and-validation)
+- [More documentation](#more-documentation)
+- [License](#license)
+
 ## Project status
 
 This started as a hobby project for my own Zig programs, and I am currently its
