@@ -36,7 +36,7 @@ module.
 
 ## Project status
 
-This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal project.
+This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal projects.
 
 Always happy to receive feedback / critique.
 
