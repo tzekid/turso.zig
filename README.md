@@ -7,7 +7,7 @@
 A small, unofficial Zig binding for the
 [Turso](https://github.com/tursodatabase/turso) database.
 
-Turso is an in-process SQL database written in Rust and designed for SQLite
+>Turso is an in-process SQL database written in Rust and designed for SQLite
 compatibility. This package builds or links Turso's public SDK Kit C library,
 exposes its C API under `turso.raw`, and provides a safer Zig API for normal
 use. A Zig program can open an in-memory or local file database without running
@@ -36,13 +36,12 @@ module.
 
 ## Project status
 
-This started as a hobby project for my own Zig programs, and I am currently its
-only maintainer. I used LLMs extensively while building and documenting it: I
-directed the work, chose the scope and architecture, reviewed the changes, and
-ran the validation.
+This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal project.
+
+Always happy to receive feedback / critique.
 
 The project is new, unofficial, and pre-1.0. It is not an official Turso SDK
-and does not promise long-term API stability yet. Test it against your own
+and does not promise long-term API stability (yet). Test it against your own
 workload and keep backups of data you care about.
 
 ## Install
