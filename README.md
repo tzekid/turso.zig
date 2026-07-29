@@ -61,7 +61,8 @@ zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
 The first build can take a while because the default backend compiles Turso
 from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
-The `master` branch contains unreleased `0.2.0` work and pins SDK Kit `v0.7.1`.
+The stable maintenance line contains unreleased `0.1.1` work and pins SDK Kit
+`v0.7.1`.
 If you want to try the code documented on the current branch:
 
 ```sh
