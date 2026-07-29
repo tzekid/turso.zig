@@ -21,6 +21,8 @@ is pre-1.0.
   deterministic rendering for every feature parsed by SDK Kit v0.7.1.
 - Added target-native Alpine 3.22 release packages for x86_64 and aarch64
   Linux musl, covering base/sync SDK variants with static/dynamic linkage.
+- Added focused examples for persistent file databases, every SQL value kind
+  and owned row copies, diagnostics, busy timeouts, and statement metadata.
 
 ### Changed
 

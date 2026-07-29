@@ -155,6 +155,45 @@ pub fn build(b: *std.Build) void {
     const basic_example_step = b.step("example-basic", "Build and run the basic in-memory CRUD example");
     basic_example_step.dependOn(&run_basic_example.step);
 
+    const file_example = b.addExecutable(.{
+        .name = "turso-file",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/file.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "turso", .module = turso_module }},
+        }),
+    });
+    const run_file_example = b.addRunArtifact(file_example);
+    const file_example_step = b.step("example-file", "Build and run the persistent file database example");
+    file_example_step.dependOn(&run_file_example.step);
+
+    const values_example = b.addExecutable(.{
+        .name = "turso-values",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/values.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "turso", .module = turso_module }},
+        }),
+    });
+    const run_values_example = b.addRunArtifact(values_example);
+    const values_example_step = b.step("example-values", "Build and run the SQL value and owned-copy example");
+    values_example_step.dependOn(&run_values_example.step);
+
+    const diagnostics_example = b.addExecutable(.{
+        .name = "turso-diagnostics",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/diagnostics.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "turso", .module = turso_module }},
+        }),
+    });
+    const run_diagnostics_example = b.addRunArtifact(diagnostics_example);
+    const diagnostics_example_step = b.step("example-diagnostics", "Build and run the diagnostics and metadata example");
+    diagnostics_example_step.dependOn(&run_diagnostics_example.step);
+
     const prepared_example = b.addExecutable(.{
         .name = "turso-prepared",
         .root_module = b.createModule(.{
@@ -284,6 +323,9 @@ pub fn build(b: *std.Build) void {
 
     const examples_step = b.step("examples", "Build and run all public examples");
     examples_step.dependOn(&run_basic_example.step);
+    examples_step.dependOn(&run_file_example.step);
+    examples_step.dependOn(&run_values_example.step);
+    examples_step.dependOn(&run_diagnostics_example.step);
     examples_step.dependOn(&run_prepared_example.step);
     examples_step.dependOn(&run_batch_example.step);
     examples_step.dependOn(&run_transaction_example.step);

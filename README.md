@@ -207,6 +207,9 @@ Every example is built from the same public module a consumer imports:
 | Example | Covers | Command |
 | --- | --- | --- |
 | [basic.zig](examples/basic.zig) | In-memory CRUD and typed column access | `zig build example-basic` |
+| [file.zig](examples/file.zig) | File persistence, reopening, and last insert row ID | `zig build example-file` |
+| [values.zig](examples/values.zig) | Every SQL value kind and copies that outlive a row | `zig build example-values` |
+| [diagnostics.zig](examples/diagnostics.zig) | Error details, busy timeout, and statement metadata | `zig build example-diagnostics` |
 | [prepared.zig](examples/prepared.zig) | Reusable statements and positional/named parameters | `zig build example-prepared` |
 | [transaction.zig](examples/transaction.zig) | Commit, explicit rollback, and rollback on scope exit | `zig build example-transaction` |
 | [batch.zig](examples/batch.zig) | Atomic/non-atomic structured batches and bounded row capture | `zig build example-batch` |
