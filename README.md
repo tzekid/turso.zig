@@ -224,8 +224,9 @@ Run the normal example set with:
 zig build examples
 ```
 
-The encryption and sync examples are compiled but not run automatically because
-they need a key file or a sync endpoint.
+The encryption example is compiled but not run automatically because it needs
+a key file. Add `-Dsync=true` to the aggregate command to compile the sync
+example; it is not run because it needs an endpoint.
 
 ## What is available
 

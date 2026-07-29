@@ -2,10 +2,10 @@ const std = @import("std");
 const turso = @import("turso");
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
-    var database = try turso.Database.open(arena.allocator(), .{ .path = ":memory:" });
+    var database = try turso.Database.open(
+        std.heap.page_allocator,
+        .{ .path = ":memory:" },
+    );
     defer database.deinit();
 
     var connection = try database.connect(.{});
@@ -16,16 +16,21 @@ pub fn main() !void {
         &.{},
         .{},
     );
-    _ = try connection.exec(
+    _ = try connection.execParams(
         "INSERT INTO users(name) VALUES (?1)",
-        &.{.{ .text = "Ada" }},
+        .{"Ada"},
         .{},
     );
 
-    var rows = try connection.query("SELECT id, name FROM users", &.{}, .{});
+    var rows = try connection.query(
+        "SELECT id, name FROM users",
+        &.{},
+        .{},
+    );
     defer rows.deinit();
+
     while (try rows.next()) |row| {
-        std.debug.print("user {d}: {s}\n", .{
+        std.debug.print("{d}: {s}\n", .{
             try row.get(i64, 0),
             try row.get([]const u8, 1),
         });
