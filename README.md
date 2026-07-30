@@ -14,36 +14,6 @@ use. A Zig program can open an in-memory or local file database without running
 a separate database server. Remote synchronization is available as an opt-in
 module.
 
-## Contents
-
-- [Project status](#project-status)
-- [Install](#install)
-- [First program](#first-program)
-- [Common tasks](#common-tasks)
-  - [Bind values instead of formatting SQL](#bind-values-instead-of-formatting-sql)
-  - [Decode a row into a struct](#decode-a-row-into-a-struct)
-  - [Use a transaction](#use-a-transaction)
-- [Runnable examples](#runnable-examples)
-- [What is available](#what-is-available)
-- [Limits and expectations](#limits-and-expectations)
-- [Optional remote sync](#optional-remote-sync)
-- [Ownership basics](#ownership-basics)
-- [Build options](#build-options)
-- [SDK Kit coverage](#sdk-kit-coverage)
-- [Platforms and validation](#platforms-and-validation)
-- [More documentation](#more-documentation)
-- [License](#license)
-
-## Project status
-
-This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal projects.
-
-Always happy to receive feedback / critique.
-
-The project is new, unofficial, and pre-1.0. It is not an official Turso SDK
-and does not promise long-term API stability (yet). Test it against your own
-workload and keep backups of data you care about.
-
 ## Install
 
 The default build needs:
@@ -61,20 +31,26 @@ zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
 The first build can take a while because the default backend compiles Turso
 from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
-The `master` branch contains unreleased `0.1.1` work and pins Turso
+`master` is the moving development channel. It contains unreleased `0.1.1`
+work and currently pins the promoted Zig `master` snapshot above plus Turso
 `main` commit `6e527a75595576790566f3d36560fbe95c5d87a2` (declared upstream
-version `0.8.0-pre.2`). Development pins are exact and reproducible even though
-their discovery channels move.
-
-The locked `v0.1.1-stable` branch preserves binding `0.1.1`, Zig `0.16.0`, and
-Turso `v0.7.1`. It is not modified by nightly maintenance. Stable publication
-from any future stable branch requires stable versions of both upstreams and
-real Turso tag provenance.
-If you want to try the code documented on the current branch:
+version `0.8.0-pre.2`). Until those inputs stabilize, `master` is the latest
+code rather than a release candidate. Its pins remain exact and reproducible:
 
 ```sh
 zig fetch --save=turso git+https://github.com/tzekid/turso.zig#master
 ```
+
+`v0.1.1-stable` is the locked stable maintenance branch for binding `0.1.1`,
+Zig `0.16.0`, and Turso SDK Kit `v0.7.1`. It does not receive nightly
+dependency updates:
+
+```sh
+zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.1-stable
+```
+
+Stable publication from any future stable branch requires stable versions of
+both upstreams and real Turso tag provenance.
 
 `zig fetch` records the resolved commit in `build.zig.zon`. Keep that hash in
 version control rather than depending on a moving branch name.
@@ -168,6 +144,36 @@ The output is:
 
 Use a path such as `app.db` instead of `:memory:` when the database should
 survive after the process exits.
+
+## Contents
+
+- [Install](#install)
+- [First program](#first-program)
+- [Project status](#project-status)
+- [Common tasks](#common-tasks)
+  - [Bind values instead of formatting SQL](#bind-values-instead-of-formatting-sql)
+  - [Decode a row into a struct](#decode-a-row-into-a-struct)
+  - [Use a transaction](#use-a-transaction)
+- [Runnable examples](#runnable-examples)
+- [What is available](#what-is-available)
+- [Limits and expectations](#limits-and-expectations)
+- [Optional remote sync](#optional-remote-sync)
+- [Ownership basics](#ownership-basics)
+- [Build options](#build-options)
+- [SDK Kit coverage](#sdk-kit-coverage)
+- [Platforms and validation](#platforms-and-validation)
+- [More documentation](#more-documentation)
+- [License](#license)
+
+## Project status
+
+This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal projects.
+
+Always happy to receive feedback / critique.
+
+The project is new, unofficial, and pre-1.0. It is not an official Turso SDK
+and does not promise long-term API stability (yet). Test it against your own
+workload and keep backups of data you care about.
 
 ## Common tasks
 
