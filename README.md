@@ -14,36 +14,6 @@ use. A Zig program can open an in-memory or local file database without running
 a separate database server. Remote synchronization is available as an opt-in
 module.
 
-## Contents
-
-- [Project status](#project-status)
-- [Install](#install)
-- [First program](#first-program)
-- [Common tasks](#common-tasks)
-  - [Bind values instead of formatting SQL](#bind-values-instead-of-formatting-sql)
-  - [Decode a row into a struct](#decode-a-row-into-a-struct)
-  - [Use a transaction](#use-a-transaction)
-- [Runnable examples](#runnable-examples)
-- [What is available](#what-is-available)
-- [Limits and expectations](#limits-and-expectations)
-- [Optional remote sync](#optional-remote-sync)
-- [Ownership basics](#ownership-basics)
-- [Build options](#build-options)
-- [SDK Kit coverage](#sdk-kit-coverage)
-- [Platforms and validation](#platforms-and-validation)
-- [More documentation](#more-documentation)
-- [License](#license)
-
-## Project status
-
-This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal project.
-
-Always happy to receive feedback / critique.
-
-The project is new, unofficial, and pre-1.0. It is not an official Turso SDK
-and does not promise long-term API stability (yet). Test it against your own
-workload and keep backups of data you care about.
-
 ## Install
 
 The default build needs:
@@ -61,9 +31,18 @@ zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
 The first build can take a while because the default backend compiles Turso
 from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
-The stable maintenance line contains unreleased `0.1.1` work and pins SDK Kit
-`v0.7.1`.
-If you want to try the code documented on the current branch:
+`v0.1.1-stable` is the locked stable maintenance channel. It contains
+unreleased binding `0.1.1` work and pins Zig `0.16.0` plus Turso SDK Kit
+`v0.7.1`. It does not receive nightly dependency updates. To use the code
+documented on this branch:
+
+```sh
+zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.1-stable
+```
+
+`master` is the moving development channel for the latest exact Zig and Turso
+development pins. It becomes release material only after both upstream inputs
+stabilize:
 
 ```sh
 zig fetch --save=turso git+https://github.com/tzekid/turso.zig#master
@@ -161,6 +140,36 @@ The output is:
 
 Use a path such as `app.db` instead of `:memory:` when the database should
 survive after the process exits.
+
+## Contents
+
+- [Install](#install)
+- [First program](#first-program)
+- [Project status](#project-status)
+- [Common tasks](#common-tasks)
+  - [Bind values instead of formatting SQL](#bind-values-instead-of-formatting-sql)
+  - [Decode a row into a struct](#decode-a-row-into-a-struct)
+  - [Use a transaction](#use-a-transaction)
+- [Runnable examples](#runnable-examples)
+- [What is available](#what-is-available)
+- [Limits and expectations](#limits-and-expectations)
+- [Optional remote sync](#optional-remote-sync)
+- [Ownership basics](#ownership-basics)
+- [Build options](#build-options)
+- [SDK Kit coverage](#sdk-kit-coverage)
+- [Platforms and validation](#platforms-and-validation)
+- [More documentation](#more-documentation)
+- [License](#license)
+
+## Project status
+
+This is currently a hobby project I spun up with the help of LLMs in a couple of days for use in my personal project.
+
+Always happy to receive feedback / critique.
+
+The project is new, unofficial, and pre-1.0. It is not an official Turso SDK
+and does not promise long-term API stability (yet). Test it against your own
+workload and keep backups of data you care about.
 
 ## Common tasks
 
