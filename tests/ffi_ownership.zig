@@ -1,8 +1,6 @@
 const std = @import("std");
 const ffi = @import("ffi");
-const raw = @cImport({
-    @cInclude("turso.h");
-});
+const raw = @import("turso_c");
 
 extern fn turso_zig_error_reset() void;
 extern fn turso_zig_error_new() [*c]const u8;

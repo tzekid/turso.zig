@@ -66,7 +66,7 @@ every platform and every change.
 | `extended.yml` | Weekly or manual | Dynamic/system linkage, features, faults, Valgrind, sync E2E, long soak | Bounded per job; seven-day diagnostics |
 | `windows-arm-preview.yml` | Weekly or manual | Tier 3 native ARM64 static promotion probe | 45-minute job cap; 10–15-minute stages |
 | `release.yml` | Version tags or manual rehearsal | Reuse supported CI, certify two source archives, publish tags | Release-only artifacts, seven-day workflow retention |
-| `drift.yml` | Weekly or manual | Advisory current-Turso and Zig-master compatibility | Seven-day diagnostics |
+| `drift.yml` | Daily candidate detection, weekly promoted-pin exercise, or manual | Classify Zig-master and Turso-main candidates; propose routine updates or open maintenance issues | Seven-day diagnostics |
 
 Documentation-only changes still run the quick gate but skip native platform
 jobs. `Supported platforms` is the stable aggregate check to use for branch
@@ -112,9 +112,9 @@ Every workflow action is pinned to an exact commit.
   version selected by the build.
 - `-Dturso-source=/path` builds and tests an explicit Turso checkout while
   deriving that checkout's workspace version.
-- The weekly drift workflow compares both headers and generated declarations,
-  inspects symbols/link dependencies, and runs the base and sync safe suites
-  against current Turso main without changing the production pin.
+- Required CI uses the exact promoted development pins. The scheduled drift
+  workflow resolves moving channels separately, records candidate evidence,
+  and never changes a required build implicitly.
 
 ### Ownership and failure
 
@@ -125,7 +125,7 @@ active execution, reset failure, structured-batch partial progress and bounded
 materialization, transaction and rollback-failure poisoning, callback context
 and aggregate-state destruction, and sync transfer/consume rules. Subprocess
 probes verify that owner-count and active-handle invariant violations remain
-fatal in Debug and ReleaseFast. Pure config tests pin every v0.7.1 feature token
+fatal in Debug and ReleaseFast. Pure config tests pin every promoted SDK Kit feature token
 and its order, reject duplicate/known or malformed unchecked names, and
 exercise feature-render allocation failure.
 

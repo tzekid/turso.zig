@@ -249,14 +249,14 @@ pub const Statement = struct {
 
     fn bindTuple(self: *Statement, input: anytype, diagnostics: ?*Diagnostics) BindError!void {
         const control = try self.requireReady(diagnostics);
-        const fields = @typeInfo(@TypeOf(input)).@"struct".fields;
-        if (fields.len != try self.parameterCount()) {
+        const field_names = @typeInfo(@TypeOf(input)).@"struct".field_names;
+        if (field_names.len != try self.parameterCount()) {
             control.state = .failed;
             ffi.setWrapperError(diagnostics, "tuple field count does not match SQL parameter count");
             return error.ParameterCountMismatch;
         }
-        inline for (fields, 1..) |field, position| {
-            const value = value_mod.Value.init(@field(input, field.name)) catch |err| {
+        inline for (field_names, 1..) |field_name, position| {
+            const value = value_mod.Value.init(@field(input, field_name)) catch |err| {
                 control.state = .failed;
                 ffi.setWrapperError(diagnostics, "tuple parameter cannot be represented without truncation");
                 return err;
@@ -271,14 +271,14 @@ pub const Statement = struct {
 
     fn bindStruct(self: *Statement, input: anytype, diagnostics: ?*Diagnostics) BindError!void {
         const control = try self.requireReady(diagnostics);
-        const fields = @typeInfo(@TypeOf(input)).@"struct".fields;
+        const field_names = @typeInfo(@TypeOf(input)).@"struct".field_names;
         const count = try self.parameterCount();
-        if (fields.len < count) {
+        if (field_names.len < count) {
             control.state = .failed;
             ffi.setWrapperError(diagnostics, "struct omits one or more named SQL parameters");
             return error.MissingParameter;
         }
-        if (fields.len > count) {
+        if (field_names.len > count) {
             control.state = .failed;
             ffi.setWrapperError(diagnostics, "struct contains fields unused by the named SQL parameters");
             return error.UnusedField;
@@ -315,11 +315,11 @@ pub const Statement = struct {
             }
 
             var matched = false;
-            inline for (fields) |field| {
-                if (std.mem.eql(u8, bare, field.name)) {
+            inline for (field_names) |field_name| {
+                if (std.mem.eql(u8, bare, field_name)) {
                     if (matched) return error.AmbiguousParameter;
                     matched = true;
-                    const value = value_mod.Value.init(@field(input, field.name)) catch |err| {
+                    const value = value_mod.Value.init(@field(input, field_name)) catch |err| {
                         control.state = .failed;
                         ffi.setWrapperError(diagnostics, "struct parameter cannot be represented without truncation");
                         return err;

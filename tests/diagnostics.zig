@@ -18,9 +18,9 @@ test "diagnostics records and clears without allocation" {
 }
 
 test "diagnostics truncates deterministically at fixed capacity" {
-    const input = "x" ** (Diagnostics.capacity + 17);
+    const input: [Diagnostics.capacity + 17]u8 = @splat('x');
     var diagnostics = Diagnostics{};
-    diagnostics.set(.io_error, input);
+    diagnostics.set(.io_error, &input);
 
     try std.testing.expectEqual(@as(usize, Diagnostics.capacity), diagnostics.text().len);
     try std.testing.expect(diagnostics.truncated);

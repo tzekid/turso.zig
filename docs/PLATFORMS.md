@@ -47,7 +47,7 @@ API compile for `aarch64-linux-android` and `aarch64-ios` when native linking is
 left to the application. This keeps future mobile integration possible without
 pretending that an unexecuted binary is usable.
 
-Pinned Turso v0.7.1 supplies stronger architectural evidence: its
+The audited `v0.7.1` stable baseline supplies stronger architectural evidence:
 [.NET](https://github.com/tursodatabase/turso/blob/4a88feb7caef869c16f6215b6dc51eafd5b3e54e/.github/workflows/dotnet-publish.yml)
 and
 [React Native](https://github.com/tursodatabase/turso/blob/4a88feb7caef869c16f6215b6dc51eafd5b3e54e/bindings/react-native/Makefile)
@@ -79,7 +79,8 @@ there.
 ## Why browser/WASM is different
 
 The official JavaScript browser package does not demonstrate that the native C
-SDK Kit can simply be linked into a Zig WASM build. In pinned v0.7.1 it builds
+SDK Kit can simply be linked into a Zig WASM build. In the audited `v0.7.1`
+baseline it builds
 the
 [Rust/Node binding](https://github.com/tursodatabase/turso/blob/4a88feb7caef869c16f6215b6dc51eafd5b3e54e/bindings/javascript/packages/wasm/package.json)
 for `wasm32-wasip1-threads`, implements a

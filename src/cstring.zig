@@ -11,7 +11,7 @@ pub fn validate(bytes: []const u8) error{ InteriorNul, InvalidUtf8 }!void {
 
 pub fn dupe(allocator: std.mem.Allocator, bytes: []const u8) Error![:0]u8 {
     try validate(bytes);
-    return allocator.dupeZ(u8, bytes);
+    return allocator.dupeSentinel(u8, bytes, 0);
 }
 
 test "dupe creates an owned C string" {

@@ -13,7 +13,7 @@ const LogCapture = struct {
     target_len: usize = 0,
     file: [512]u8 = undefined,
     file_len: usize = 0,
-    saw_level: [6]bool = .{false} ** 6,
+    saw_level: [6]bool = @splat(false),
     saw_secret: bool = false,
 };
 

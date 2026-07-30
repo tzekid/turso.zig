@@ -1,6 +1,7 @@
 /*
- * Vendored from https://github.com/tursodatabase/turso/blob/v0.7.1/sync/sdk-kit/turso_sync.h
- * Upstream commit: 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
+ * Vendored from https://github.com/tursodatabase/turso/blob/6e527a75595576790566f3d36560fbe95c5d87a2/sync/sdk-kit/turso_sync.h
+ * Upstream channel: main
+ * Upstream commit: 6e527a75595576790566f3d36560fbe95c5d87a2
  * Copyright the Turso project contributors. Licensed under the MIT License.
  * The upstream header follows unchanged below this attribution block.
  */
@@ -144,8 +145,10 @@ typedef struct
     // is fetched in chunks via the server_pages_selector bitmap. 0 (default) bootstraps
     // in a single round-trip. no-op when partial-sync uses the query bootstrap strategy.
     size_t pull_bytes_threshold;
-    // when true, V1 incremental pulls use the MVCC logical-log stream instead of
-    // the page stream. required for MVCC-mode remotes; leave false for legacy sync.
+    // when true, forces V1 incremental pulls to use the MVCC logical-log stream.
+    // false (default) auto-detects the remote's protocol from the first
+    // pull-updates response and persists it in the sync metadata, so this only
+    // needs to be set as an escape hatch.
     bool logical_mvcc_pull;
 } turso_sync_database_config_t;
 

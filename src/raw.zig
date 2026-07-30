@@ -1,11 +1,11 @@
 //! Mechanically translated Turso SDK Kit C ABI.
 //!
 //! The declarations come exclusively from the pinned `include/turso.h` through
-//! `@cImport`; there is no second, hand-maintained set of extern declarations.
+//! the build system's C translation step; there is no second, hand-maintained
+//! set of extern declarations.
 
-pub const c = @cImport({
-    @cInclude("turso.h");
-});
+pub const c = @import("turso_c");
+pub const version = @import("version.zig");
 
 test "pinned ABI translates" {
     _ = c.turso_database_t;

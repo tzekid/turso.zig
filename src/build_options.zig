@@ -2,4 +2,4 @@
 ///
 /// The package build replaces this module when `-Dturso-source` selects an
 /// explicit Turso checkout.
-pub const expected_runtime_version = "0.7.1";
+pub const expected_runtime_version = "0.8.0-pre.2";

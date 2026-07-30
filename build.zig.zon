@@ -2,11 +2,11 @@
     .name = .turso,
     .version = "0.1.1",
     .fingerprint = 0x18fb0b7e7b06fd7d, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0-dev.1509+bb296ab9b",
     .dependencies = .{
         .turso_native = .{
-            .url = "https://github.com/tursodatabase/turso/archive/refs/tags/v0.7.1.tar.gz",
-            .hash = "N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd",
+            .url = "https://github.com/tursodatabase/turso/archive/6e527a75595576790566f3d36560fbe95c5d87a2.tar.gz",
+            .hash = "N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr",
             .lazy = true,
         },
     },
@@ -21,6 +21,7 @@
         "examples",
         "docs",
         "CHANGELOG.md",
+        "AGENTS.md",
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "LICENSE",

@@ -6,19 +6,23 @@ status, or behavior.
 
 ## 1. Establish immutable provenance
 
-Use a separate Turso checkout and select a release tag rather than a moving
-branch:
+Use a separate Turso checkout. On `master`, resolve `main` once and immediately
+freeze the resulting full commit; for a stable release, select an annotated
+release tag:
 
 ```sh
-git -C /path/to/turso fetch --tags origin
-git -C /path/to/turso rev-parse '<tag>^{tag}'
-git -C /path/to/turso rev-parse '<tag>^{commit}'
-git -C /path/to/turso show -s --format='%ct %cI' '<tag>^{commit}'
+git -C /path/to/turso fetch --tags origin main
+git -C /path/to/turso rev-parse 'origin/main^{commit}' # development
+git -C /path/to/turso rev-parse '<tag>^{tag}'           # stable release
+git -C /path/to/turso rev-parse '<tag>^{commit}'        # stable release
+git -C /path/to/turso show -s --format='%ct %cI' '<commit>'
 ```
 
-Record the annotated tag object, peeled source commit, source timestamp, archive
-URL, and Zig package hash. Review the full upstream diff from the previous
-peeled commit.
+Record the discovery channel, immutable commit, source timestamp,
+commit-addressed archive URL, and Zig package hash. Stable releases additionally
+record and verify the annotated tag object and peeled commit. Never invent tag
+provenance for a development commit. Review the full upstream diff from the
+previous promoted commit.
 
 ## 2. Audit the C boundary first
 
@@ -40,7 +44,8 @@ before changing the safe wrapper.
 
 In one reviewable change:
 
-1. Update the source tag URL and Zig package hash in `build.zig.zon`.
+1. Update the commit-addressed source URL and Zig package hash in
+   `build.zig.zon`.
 2. Copy both exact headers into `include/`, retaining their wrapper attribution.
 3. Update `src/version.zig`, `src/build_options.zig`, `NOTICE`, the
    `SOURCE_DATE_EPOCH` in `build.zig`, and
@@ -104,9 +109,14 @@ Capture native static link requirements, dynamic dependencies, minimum libc/OS
 evidence, tool versions, checksums, and installed runtime lookup separately for
 each target.
 
-## 6. Release as an intentional compatibility event
+## 6. Promote development or release intentionally
 
-Update `CHANGELOG.md` even when downstream Zig source remains compatible. Run
-deterministic package assembly and extracted-consumer smoke tests, verify both
-upstream notices, and require the full hosted matrix. Publish only after the
-release commit is green and the annotated tag points to that exact commit.
+Development promotion updates `master` without changing the binding version or
+publishing assets. Update `CHANGELOG.md` even when downstream Zig source remains
+compatible and run the target manifest, ABI, behavior, and hosted gates.
+
+Stable publication is a separate compatibility event. It first replaces
+development Zig and Turso inputs with stable versions and real tag provenance,
+then runs deterministic package assembly and extracted-consumer smoke tests.
+Publish only after the release commit is green and the annotated tags point to
+the exact audited commits.

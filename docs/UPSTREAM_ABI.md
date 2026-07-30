@@ -2,10 +2,18 @@
 
 ## Scope and authority
 
-This release audit is pinned to final annotated tag `v0.7.1` (tag object
+The detailed stable baseline below is pinned to final annotated tag `v0.7.1` (tag object
 `31cdceeb07d3b294e5b2f13b03cfdbbf59769b78`) and its peeled source commit
 `4a88feb7caef869c16f6215b6dc51eafd5b3e54e`. Links below use that immutable
-release commit. Re-audit this document on every upstream pin change.
+release commit.
+
+`master` currently promotes development channel `main` at commit
+`6e527a75595576790566f3d36560fbe95c5d87a2`, declared version
+`0.8.0-pre.2`. The base header body remains byte-identical to the stable
+baseline. The sync header changes comments only; its promoted body digest is
+`f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1`.
+The development delta audit is recorded below. Re-audit it on every promoted
+commit.
 
 The audited upstream header body digests are:
 
@@ -14,9 +22,39 @@ The audited upstream header body digests are:
 - `sync/sdk-kit/turso_sync.h`:
   `38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35`
 
-Other upstream checkouts are research snapshots only. No claim from a moving
-checkout is release authority unless independently reproduced against the
-peeled tag; the exact-tag native test suite is the behavioral gate.
+Moving upstream refs are discovery inputs only. Required builds use the exact
+promoted commit. Stable release authority still requires an annotated tag and
+cannot use the development commit.
+
+## Development delta: v0.7.1 to main 6e527a75
+
+The reviewed relevant diff changes six files: the workspace manifest and
+lockfile, `sdk-kit/src/lib.rs`, `sdk-kit/src/rsapi.rs`,
+`sync/sdk-kit/src/rsapi.rs`, and sync-header comments. `LICENSE.md`,
+`NOTICE.md`, the base C header, C function declarations, exported symbol
+allowlists, crate feature names, native library names, and Rust `1.88`
+toolchain requirement are unchanged.
+
+The base SDK refactors internal VFS selection to a typed `IoBackend` and routes
+database opening through the new core open API. The C strings and behavior
+exposed to this binding remain the same; target validation and the blocking
+`async_io = false` policy are retained. Workspace dependency and lockfile
+changes alter the native implementation and therefore require the full native
+matrix, but do not add native link requirements observed by the ABI gate.
+
+Sync now interprets C `logical_mvcc_pull = false` as protocol auto-detection
+and persistence, while `true` remains an explicit MVCC override. Fresh MVCC
+bootstrap also catches up through the durable logical-log tail before
+connection. This is a behavior change, not an ABI layout change. The wrapper's
+default `false` now gains auto-detection; its explicit opt-in remains a force
+override. Ownership, transfer, destructor, callback, and error-allocation
+declarations are unchanged.
+
+The promoted commit passed translated-declaration comparison, base exported
+symbols and C probes, runtime-version match/mismatch, native safe suites, and
+the deterministic sync lifecycle/transport fixtures locally. Target-native
+hosted and extended results remain the authority for their respective platform
+claims.
 
 The implementation should resolve conflicting evidence in this order:
 

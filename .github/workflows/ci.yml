@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ZIG_VERSION: 0.16.0
+  ZIG_VERSION: 0.17.0-dev.1509+bb296ab9b
   RUST_TOOLCHAIN: "1.88"
   CARGO_TERM_COLOR: always
 
@@ -88,7 +88,7 @@ jobs:
             esac
 
             case "$path" in
-              build.zig|build.zig.zon|src/*|include/*|tests/*sync*|tools/check-sync-e2e.sh|.github/workflows/*)
+              build.zig|build.zig.zon|src/*|include/*|tests/*sync*|tests/expected-*-symbols.txt|tools/development-targets.json|tools/*development-target*|tools/check-upstream-drift.sh|tools/check-sync-e2e.sh|.github/workflows/*)
                 sync=true
                 ;;
             esac
@@ -127,6 +127,16 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
           use-cache: false
 
+      - name: Record promoted environment
+        run: |
+          echo "turso.zig commit=$(git rev-parse HEAD)"
+          echo "zig=$(zig version)"
+          echo "rust=$(rustc -V)"
+          echo "cargo=$(cargo -V)"
+          jq -r '"turso=\(.turso.declared_version) commit=\(.turso.commit) rust=\(.turso.rust_toolchain)"' tools/development-targets.json
+          jq -r '"base_header=\(.turso.base_header_sha256) sync_header=\(.turso.sync_header_sha256)"' tools/development-targets.json
+          echo "required targets=x86_64-linux-gnu,aarch64-macos,x86_64-windows-msvc,aarch64-linux-gnu"
+
       - name: Verify formatting and shell scripts
         run: |
           zig fmt --check build.zig src tests examples bench tools/*.zig
@@ -146,14 +156,13 @@ jobs:
           tools/check-abi-symbols.sh --header-only
           tools/check-abi-symbols.sh --sync --header-only
           test "$(zig version)" = "$ZIG_VERSION"
-          header_sha=$(sed -n '/^#ifndef TURSO_H/,$p' include/turso.h | sha256sum | cut -d' ' -f1)
-          test "$header_sha" = "14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb"
-          sync_header_sha=$(sed -n '/^#ifndef TURSO_SYNC_H/,$p' include/turso_sync.h | sha256sum | cut -d' ' -f1)
-          test "$sync_header_sha" = "38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35"
-          grep -F 'v0.7.1.tar.gz' build.zig.zon
-          grep -F 'N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd' build.zig.zon
-          grep -F '4a88feb7caef869c16f6215b6dc51eafd5b3e54e' src/version.zig
-          grep -F '31cdceeb07d3b294e5b2f13b03cfdbbf59769b78' src/version.zig
+          tools/check-development-targets.sh
+          tests/classify-development-targets.sh
+          if tools/check-release-inputs.sh --skip-tree-state --skip-ref 2>release-guard.log; then
+            echo "development inputs unexpectedly passed the stable release guard" >&2
+            exit 1
+          fi
+          grep -F "Zig must be stable" release-guard.log
           git diff --exit-code
 
   linux-x64:

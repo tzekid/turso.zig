@@ -1,15 +1,19 @@
-name: Advisory upstream drift
+name: Development target maintenance
 
 on:
   schedule:
-    - cron: "41 4 * * 1"
+    - cron: "23 4 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: development-target-maintenance
+  cancel-in-progress: false
+
 env:
-  ZIG_VERSION: 0.16.0
+  ZIG_VERSION: 0.17.0-dev.1509+bb296ab9b
   RUST_TOOLCHAIN: "1.88"
   CARGO_TERM_COLOR: always
 
@@ -18,17 +22,170 @@ defaults:
     shell: bash
 
 jobs:
-  turso-main:
-    name: Turso main ABI and smoke advisory
+  resolve:
+    name: Resolve moving channels
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 10
+    outputs:
+      zig_changed: ${{ steps.compare.outputs.zig_changed }}
+      turso_changed: ${{ steps.compare.outputs.turso_changed }}
+      zig_release: ${{ steps.compare.outputs.zig_release }}
+      turso_release: ${{ steps.compare.outputs.turso_release }}
+      zig_version: ${{ steps.compare.outputs.zig_version }}
+      turso_commit: ${{ steps.compare.outputs.turso_commit }}
+      zig_stable: ${{ steps.compare.outputs.zig_stable }}
+      turso_stable: ${{ steps.compare.outputs.turso_stable }}
     steps:
-      - name: Check out production pin
+      - name: Check out promoted targets
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install Zig
+      - name: Install promoted Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Resolve candidates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: tools/resolve-development-targets.sh > candidate.json
+
+      - name: Compare candidates
+        id: compare
+        run: |
+          promoted=tools/development-targets.json
+          candidate=candidate.json
+          {
+            echo "zig_changed=$(jq -s '.[0].zig != .[1].zig' "$promoted" "$candidate")"
+            echo "turso_changed=$(jq -s '.[0].turso != .[1].turso' "$promoted" "$candidate")"
+            echo "zig_release=$(jq -s '.[0].release_monitor.zig_last_notified != .[1].discovered_stable.zig' "$promoted" "$candidate")"
+            echo "turso_release=$(jq -s '.[0].release_monitor.turso_last_notified != .[1].discovered_stable.turso' "$promoted" "$candidate")"
+            echo "zig_version=$(jq -r .zig.version "$candidate")"
+            echo "turso_commit=$(jq -r .turso.commit "$candidate")"
+            echo "zig_stable=$(jq -r .discovered_stable.zig "$candidate")"
+            echo "turso_stable=$(jq -r .discovered_stable.turso "$candidate")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload immutable candidate record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: development-candidate
+          path: candidate.json
+          retention-days: 7
+
+  zig-candidate:
+    name: Zig master candidate
+    needs: resolve
+    if: needs.resolve.outputs.zig_changed == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      classification: ${{ steps.classify.outputs.classification }}
+    steps:
+      - name: Check out project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: development-candidate
+
+      - name: Install candidate Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ needs.resolve.outputs.zig_version }}
+          use-cache: false
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Check formatting
+        id: format
+        continue-on-error: true
+        run: zig fmt --check build.zig src tests examples bench tools/soak.zig
+
+      - name: Run candidate matrix
+        id: verify
+        continue-on-error: true
+        run: |
+          zig version
+          zig build test-pure --summary all
+          zig build test-ownership-invariants -Doptimize=ReleaseFast --summary all
+          zig build test -j2 --summary all
+          zig build examples -j2 --summary all
+          zig build docs --summary all
+
+      - name: Classify
+        id: classify
+        if: always()
+        env:
+          FORMAT_OUTCOME: ${{ steps.format.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        run: |
+          mkdir -p evidence
+          jq -n \
+            --arg format "$FORMAT_OUTCOME" \
+            --arg verify "$VERIFY_OUTCOME" \
+            '{
+              infrastructure: "passed",
+              stable_release_detected: false,
+              format: (if $format == "success" then "unchanged" else "changed" end),
+              compile: (if $verify == "success" then "passed" else "failed" end),
+              tests: (if $verify == "success" then "passed" else "failed" end),
+              abi: "unchanged",
+              behavior_audit: "unchanged",
+              features: "unchanged",
+              native_dependencies: "unchanged",
+              licenses: "unchanged"
+            }' > evidence/classification-evidence.json
+          tools/classify-development-target.sh \
+            zig tools/development-targets.json candidate.json \
+            evidence/classification-evidence.json > evidence/classification.json
+          echo "classification=$(jq -r .classification evidence/classification.json)" >> "$GITHUB_OUTPUT"
+          jq . evidence/classification.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Zig evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zig-candidate-evidence
+          path: evidence/
+          retention-days: 7
+
+  turso-candidate:
+    name: Turso main candidate
+    needs: resolve
+    if: needs.resolve.outputs.turso_changed == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    outputs:
+      classification: ${{ steps.classify.outputs.classification }}
+    steps:
+      - name: Check out project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: development-candidate
+
+      - name: Check out exact Turso candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tursodatabase/turso
+          ref: ${{ needs.resolve.outputs.turso_commit }}
+          path: candidate-turso
+          persist-credentials: false
+
+      - name: Install promoted Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: ${{ env.ZIG_VERSION }}
@@ -39,46 +196,282 @@ jobs:
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
 
-      - name: Compare and smoke current Turso main
-        run: tools/check-upstream-drift.sh "$RUNNER_TEMP/drift-evidence"
+      - name: Audit and test exact candidate
+        id: verify
+        continue-on-error: true
+        run: tools/check-upstream-drift.sh "$RUNNER_TEMP/turso-evidence" "$GITHUB_WORKSPACE/candidate-turso"
 
-      - name: Publish advisory summary
+      - name: Ensure evidence exists
         if: always()
+        env:
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         run: |
-          if test -f "$RUNNER_TEMP/drift-evidence/summary.txt"; then
-            cat "$RUNNER_TEMP/drift-evidence/summary.txt" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Drift probe failed before producing a summary." >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$RUNNER_TEMP/turso-evidence"
+          if test ! -f "$RUNNER_TEMP/turso-evidence/classification-evidence.json"; then
+            jq -n --arg outcome "$VERIFY_OUTCOME" \
+              '{
+                infrastructure: (if $outcome == "success" then "passed" else "failed" end),
+                stable_release_detected: false
+              }' > "$RUNNER_TEMP/turso-evidence/classification-evidence.json"
           fi
 
-      - name: Upload drift evidence
+      - name: Classify
+        id: classify
+        if: always()
+        run: |
+          tools/classify-development-target.sh \
+            turso tools/development-targets.json candidate.json \
+            "$RUNNER_TEMP/turso-evidence/classification-evidence.json" \
+            > "$RUNNER_TEMP/turso-evidence/classification.json"
+          echo "classification=$(jq -r .classification "$RUNNER_TEMP/turso-evidence/classification.json")" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/turso-evidence/summary.txt" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          jq . "$RUNNER_TEMP/turso-evidence/classification.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Turso evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: turso-main-drift-${{ github.run_id }}
-          path: ${{ runner.temp }}/drift-evidence/
-          if-no-files-found: warn
+          name: turso-candidate-evidence
+          path: ${{ runner.temp }}/turso-evidence/
           retention-days: 7
 
-  zig-master:
-    name: Zig master compile advisory
+  resolver-failure:
+    name: Report resolver infrastructure failure
+    needs: resolve
+    if: always() && needs.resolve.result == 'failure'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    continue-on-error: true
+    timeout-minutes: 5
+    permissions:
+      issues: write
     steps:
-      - name: Check out production pin
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install Zig master
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: master
-          use-cache: false
-
-      - name: Compile native-independent API surface
+      - name: Open one deduplicated infrastructure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          zig version
-          zig fmt --check build.zig src tests examples bench tools/soak.zig
-          zig build test-pure -Doptimize=Debug --summary all
+          marker="development-target:resolver:infrastructure"
+          gh label create upstream-maintenance --repo "$REPOSITORY" --color B60205 --force
+          number=$(
+            gh issue list --repo "$REPOSITORY" --state open --limit 100 \
+              --label upstream-maintenance --json number,body \
+              --jq ".[] | select(.body | contains(\"$marker\")) | .number" |
+              head -1
+          )
+          if test -n "$number"; then
+            echo "Resolver issue #$number is already open; duplicate notification suppressed."
+            exit 0
+          fi
+          gh issue create --repo "$REPOSITORY" \
+            --title "Development target resolver infrastructure failure" \
+            --assignee "$OWNER" \
+            --label upstream-maintenance \
+            --body "<!-- $marker -->
+
+          The retried candidate resolver failed before producing trustworthy evidence.
+
+          Workflow: $RUN_URL"
+          exit 1
+
+  release-events:
+    name: Report new stable ${{ matrix.upstream }} release
+    needs: resolve
+    if: needs.resolve.result == 'success' && (needs.resolve.outputs.zig_release == 'true' || needs.resolve.outputs.turso_release == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - upstream: zig
+            detected: ${{ needs.resolve.outputs.zig_release }}
+            revision: ${{ needs.resolve.outputs.zig_stable }}
+          - upstream: turso
+            detected: ${{ needs.resolve.outputs.turso_release }}
+            revision: ${{ needs.resolve.outputs.turso_stable }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open one deduplicated release issue
+        if: matrix.detected == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          UPSTREAM: ${{ matrix.upstream }}
+          REVISION: ${{ matrix.revision }}
+        run: |
+          marker="development-target:$UPSTREAM:$REVISION:release-event"
+          gh label create upstream-maintenance --repo "$REPOSITORY" --color B60205 --force
+          gh label create "$UPSTREAM" --repo "$REPOSITORY" --color 1D76DB --force
+          gh label create release-candidate --repo "$REPOSITORY" --color 0E8A16 --force
+          number=$(
+            gh issue list --repo "$REPOSITORY" --state all --limit 100 \
+              --label upstream-maintenance --json number,body,state \
+              --jq ".[] | select(.body | contains(\"$marker\")) | .number" |
+              head -1
+          )
+          if test -n "$number"; then
+            state=$(gh issue view "$number" --repo "$REPOSITORY" --json state --jq .state)
+            if test "$state" = CLOSED; then
+              gh issue reopen "$number" --repo "$REPOSITORY"
+              gh issue comment "$number" --repo "$REPOSITORY" \
+                --body "This release has not been acknowledged in the monitor baseline. Evidence: $RUN_URL"
+              exit 1
+            fi
+            echo "Issue #$number already covers this release; duplicate notification suppressed."
+            exit 0
+          fi
+          gh issue create --repo "$REPOSITORY" \
+            --title "$UPSTREAM stable release available: $REVISION" \
+            --assignee "$OWNER" \
+            --label "upstream-maintenance,$UPSTREAM,release-candidate" \
+            --body "<!-- $marker -->
+
+          A new stable $UPSTREAM release, **$REVISION**, is available.
+
+          This is a notification only. It does not modify \`master\`, \`v0.1.1-stable\`, a release tag, or the package version.
+
+          Evidence: $RUN_URL"
+          exit 1
+
+  act:
+    name: Act on ${{ matrix.upstream }} candidate
+    needs: [resolve, zig-candidate, turso-candidate]
+    if: always() && needs.resolve.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - upstream: zig
+            classification: ${{ needs.zig-candidate.outputs.classification }}
+            revision: ${{ needs.resolve.outputs.zig_version }}
+            stable_revision: ${{ needs.resolve.outputs.zig_stable }}
+          - upstream: turso
+            classification: ${{ needs.turso-candidate.outputs.classification }}
+            revision: ${{ needs.resolve.outputs.turso_commit }}
+            stable_revision: ${{ needs.resolve.outputs.turso_stable }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Ignore unchanged or skipped candidate
+        if: matrix.classification == '' || matrix.classification == 'no-change'
+        run: echo "No action is required for ${{ matrix.upstream }}."
+
+      - name: Check out project for mutation
+        if: matrix.classification != '' && matrix.classification != 'no-change'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download candidate record
+        if: matrix.classification != '' && matrix.classification != 'no-change'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: development-candidate
+
+      - name: Download candidate evidence
+        if: matrix.classification != '' && matrix.classification != 'no-change'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.upstream }}-candidate-evidence
+          path: evidence
+
+      - name: Open or update routine draft
+        if: matrix.classification == 'routine'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM: ${{ matrix.upstream }}
+          REVISION: ${{ matrix.revision }}
+        run: |
+          branch="automation/$UPSTREAM-development-target"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -C "$branch"
+          tools/apply-development-target.sh "$UPSTREAM" candidate.json
+          git add --all
+          git commit -m "chore: update $UPSTREAM development target to $REVISION"
+          remote_revision=$(
+            git ls-remote --heads origin "refs/heads/$branch" |
+              awk 'NR == 1 { print $1 }'
+          )
+          if test -n "$remote_revision"; then
+            git push \
+              --force-with-lease="refs/heads/$branch:$remote_revision" \
+              --set-upstream origin "$branch"
+          else
+            git push --set-upstream origin "$branch"
+          fi
+          existing=$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')
+          if test -z "$existing"; then
+            gh pr create --draft \
+              --base master \
+              --head "$branch" \
+              --title "chore: update $UPSTREAM development target" \
+              --body "Automated routine candidate update to \`$REVISION\`. Review the attached workflow evidence before merging."
+          else
+            gh pr comment "$existing" --body "Updated the routine candidate to \`$REVISION\`."
+          fi
+
+      - name: Open deduplicated maintenance issue
+        if: matrix.classification == 'maintenance-required' || matrix.classification == 'release-event' || matrix.classification == 'infrastructure-failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM: ${{ matrix.upstream }}
+          REVISION: ${{ matrix.revision }}
+          STABLE_REVISION: ${{ matrix.stable_revision }}
+          CLASSIFICATION: ${{ matrix.classification }}
+          OWNER: ${{ github.repository_owner }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if test "$CLASSIFICATION" = release-event; then REVISION="$STABLE_REVISION"; fi
+          marker="development-target:$UPSTREAM:$REVISION:$CLASSIFICATION"
+          gh label create upstream-maintenance --color B60205 --force
+          gh label create "$UPSTREAM" --color 1D76DB --force
+          if test "$CLASSIFICATION" = release-event; then
+            gh label create release-candidate --color 0E8A16 --force
+          fi
+          breaking=false
+          if test "$CLASSIFICATION" = maintenance-required &&
+              jq -e '.reasons[] | test("ABI|version family|format|compile|behavior"; "i")' \
+                evidence/classification.json >/dev/null; then
+            gh label create breaking-change --color D93F0B --force
+            breaking=true
+          fi
+          number=$(
+            gh issue list --state all --limit 100 \
+              --label upstream-maintenance \
+              --json number,body,state \
+              --jq ".[] | select(.body | contains(\"$marker\")) | .number" |
+              head -1
+          )
+          if test -n "$number"; then
+            state=$(gh issue view "$number" --json state --jq .state)
+            if test "$state" = CLOSED; then
+              gh issue reopen "$number"
+              gh issue comment "$number" --body "The same unresolved candidate is relevant again. Evidence: $RUN_URL"
+              exit 1
+            fi
+            echo "Issue #$number already covers this candidate; suppressing duplicate notification."
+            exit 0
+          fi
+          labels="upstream-maintenance,$UPSTREAM"
+          if test "$CLASSIFICATION" = release-event; then labels="$labels,release-candidate"; fi
+          if test "$breaking" = true; then labels="$labels,breaking-change"; fi
+          reasons=$(jq -r '.reasons[] | "- " + .' evidence/classification.json)
+          gh issue create \
+            --title "$UPSTREAM candidate requires attention: $REVISION" \
+            --assignee "$OWNER" \
+            --label "$labels" \
+            --body "$(printf '%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n' \
+              "<!-- $marker -->" \
+              "Classification: **$CLASSIFICATION**" \
+              "$reasons" \
+              "Evidence: $RUN_URL" \
+              "Reproduce locally:" \
+              "\`tools/resolve-development-targets.sh > candidate.json && tools/classify-development-target.sh $UPSTREAM tools/development-targets.json candidate.json evidence.json\`")"
+          exit 1

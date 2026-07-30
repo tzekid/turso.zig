@@ -4,29 +4,32 @@ Releases are tied to an exact Turso SDK Kit tag. A release is ready only after
 the wrapper, the C headers, the native libraries, and clean downstream
 consumers have passed the target-native CI matrix.
 
-## Pinned release inputs
+## Current development inputs are not releasable
 
 | Item | Value |
 | --- | --- |
-| turso.zig development version | `0.1.1` |
-| Zig | `0.16.0` |
+| turso.zig version | `0.1.1` |
+| Zig development snapshot | `0.17.0-dev.1509+bb296ab9b` |
 | Rust | `1.88` |
-| Turso crate | `0.7.1` |
-| Turso tag | `v0.7.1` |
-| Annotated tag object | `31cdceeb07d3b294e5b2f13b03cfdbbf59769b78` |
-| Peeled source commit | `4a88feb7caef869c16f6215b6dc51eafd5b3e54e` |
-| Zig package hash | `N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd` |
+| Turso development version | `0.8.0-pre.2` |
+| Turso channel | `main` |
+| Turso commit | `6e527a75595576790566f3d36560fbe95c5d87a2` |
+| Zig package hash | `N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr` |
 | `turso.h` body SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
-| `turso_sync.h` body SHA-256 | `38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35` |
-| Reproducible source epoch | `1784727869` |
+| `turso_sync.h` body SHA-256 | `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1` |
+| Reproducible source epoch | `1785419245` |
 
-Version 0.1.1 is currently unreleased. The latest tag is `v0.1.0`; this table
-describes inputs being prepared for a future release, not an existing tag or
-set of downloadable assets.
+These are the reproducible development inputs on `master`, not release
+candidates. `tools/check-release-inputs.sh` rejects the `-dev` Zig compiler,
+the `-pre` Turso version, null tag provenance, and the `master` branch.
+Preparing a stable release is a separate change that selects stable Zig and
+Turso versions, records a real annotated Turso tag, and deliberately decides
+the binding version. The `v0.1.1-stable` branch remains the locked stable
+baseline.
 
-The tag object and peeled commit are intentionally recorded separately. The
-vendored headers carry wrapper attribution above the upstream include guards,
-so compare their upstream bodies with:
+For a future stable release, the tag object and peeled commit are recorded
+separately. Vendored headers carry wrapper attribution above the upstream
+include guards, so compare their upstream bodies with:
 
 ```sh
 sed -n '/^#ifndef TURSO_H/,$p' include/turso.h | sha256sum
@@ -123,7 +126,7 @@ from clean extractions:
 
 ```sh
 tests/release-package.sh \
-  --upstream-root /path/to/exact-v0.7.1-checkout \
+  --upstream-root /path/to/exact-stable-tag-checkout \
   --static /path/to/libturso_sdk_kit.a \
   --dynamic /path/to/libturso_sdk_kit.so \
   --static-deps /path/to/native-static-libs.txt \

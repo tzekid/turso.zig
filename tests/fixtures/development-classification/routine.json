@@ -1,0 +1,12 @@
+{
+  "infrastructure": "passed",
+  "stable_release_detected": false,
+  "format": "unchanged",
+  "compile": "passed",
+  "tests": "passed",
+  "abi": "unchanged",
+  "behavior_audit": "unchanged",
+  "features": "unchanged",
+  "native_dependencies": "unchanged",
+  "licenses": "unchanged"
+}

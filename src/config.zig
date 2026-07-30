@@ -237,7 +237,7 @@ test "VFS validation rejects target-invalid built-ins and empty custom names" {
     }
 }
 
-test "FeatureSet renders every v0.7.1 feature exactly once in stable order" {
+test "FeatureSet renders every promoted SDK Kit feature exactly once in stable order" {
     const allocator = std.testing.allocator;
     const rendered = (try (FeatureSet{
         .views = true,

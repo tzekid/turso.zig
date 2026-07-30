@@ -23,9 +23,12 @@ test -f "$upstream_header"
 test -f "$upstream_sync_header"
 
 commit=$(git -C "$upstream_root" rev-parse HEAD)
+promoted_commit=$(jq -er '.turso.commit' "$repo_root/tools/development-targets.json")
+promoted_version=$(jq -er '.turso.declared_version' "$repo_root/tools/development-targets.json")
 printf '%s\n' \
-  "production_pin=v0.7.1" \
-  "production_commit=4a88feb7caef869c16f6215b6dc51eafd5b3e54e" \
+  "promoted_channel=main" \
+  "promoted_version=$promoted_version" \
+  "promoted_commit=$promoted_commit" \
   "candidate_commit=$commit" \
   "checked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$output_dir/provenance.txt"
 
@@ -95,12 +98,14 @@ if (( build_status == 0 )); then
     set +e
     (
       cd "$repo_root"
+      zig translate-c -I "$upstream_root/sdk-kit" "$upstream_header" >"$output_dir/candidate-c.zig"
       library_dir=$(dirname "$dynamic_library")
       export LD_LIBRARY_PATH="$library_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
       zig test \
         -cflags -std=c11 -Werror -I"$upstream_root/sdk-kit" -- tests/abi_probe.c \
         -ODebug --dep turso_raw -Mroot=tests/abi.zig \
-        -I "$upstream_root/sdk-kit" -Mturso_raw=src/raw.zig \
+        -I "$upstream_root/sdk-kit" --dep turso_c -Mturso_raw=src/raw.zig \
+        -Mturso_c="$output_dir/candidate-c.zig" \
         -lc -L "$(dirname "$dynamic_library")" -rpath "$(dirname "$dynamic_library")" \
         -search_paths_first -lturso_sdk_kit
     ) > "$output_dir/raw-smoke.log" 2>&1
@@ -152,6 +157,80 @@ sync_suite_code=$?
 set -e
 if (( sync_suite_code == 0 )); then sync_suite_status=passed; else sync_suite_status=failed; fi
 
+if ! git -C "$upstream_root" cat-file -e "$promoted_commit^{commit}" 2>/dev/null; then
+  git -C "$upstream_root" fetch --depth 1 origin "$promoted_commit"
+fi
+
+if git -C "$upstream_root" diff --quiet "$promoted_commit" "$commit" -- \
+  sdk-kit/src sdk-kit-macros sync/sdk-kit/src core/src; then
+  behavior_audit=unchanged
+else
+  behavior_audit=changed
+fi
+if git -C "$upstream_root" diff --quiet "$promoted_commit" "$commit" -- \
+  sdk-kit/Cargo.toml sync/sdk-kit/Cargo.toml; then
+  features_status=unchanged
+else
+  features_status=changed
+fi
+if git -C "$upstream_root" diff --quiet "$promoted_commit" "$commit" -- \
+  Cargo.lock Cargo.toml rust-toolchain.toml; then
+  native_dependencies_status=unchanged
+else
+  native_dependencies_status=changed
+fi
+if git -C "$upstream_root" diff --quiet "$promoted_commit" "$commit" -- LICENSE.md NOTICE.md; then
+  licenses_status=unchanged
+else
+  licenses_status=changed
+fi
+
+if zig fmt --check "$repo_root/build.zig" "$repo_root/src" "$repo_root/tests" \
+  "$repo_root/examples" "$repo_root/bench" "$repo_root/tools/soak.zig"; then
+  format_status=unchanged
+else
+  format_status=changed
+fi
+
+if [[ $generated_status == unchanged && $generated_sync_status == unchanged &&
+  $symbols_status == compatible ]]; then
+  abi_status=unchanged
+else
+  abi_status=changed
+fi
+if (( build_status == 0 )) && [[ $smoke_status == passed ]]; then
+  compile_status=passed
+else
+  compile_status=failed
+fi
+if [[ $safe_suite_status == passed && $sync_suite_status == passed ]]; then
+  tests_status=passed
+else
+  tests_status=failed
+fi
+
+jq -n \
+  --arg format "$format_status" \
+  --arg compile "$compile_status" \
+  --arg tests "$tests_status" \
+  --arg abi "$abi_status" \
+  --arg behavior_audit "$behavior_audit" \
+  --arg features "$features_status" \
+  --arg native_dependencies "$native_dependencies_status" \
+  --arg licenses "$licenses_status" \
+  '{
+    infrastructure: "passed",
+    stable_release_detected: false,
+    format: $format,
+    compile: $compile,
+    tests: $tests,
+    abi: $abi,
+    behavior_audit: $behavior_audit,
+    features: $features,
+    native_dependencies: $native_dependencies,
+    licenses: $licenses
+  }' >"$output_dir/classification-evidence.json"
+
 {
   echo "header=$header_status"
   echo "sync_header=$sync_header_status"
@@ -163,5 +242,9 @@ if (( sync_suite_code == 0 )); then sync_suite_status=passed; else sync_suite_st
   echo "native_static_links=$native_links_status"
   echo "safe_suite=$safe_suite_status"
   echo "sync_suite=$sync_suite_status"
-  echo "production_pin_changed=no"
+  echo "behavior_audit=$behavior_audit"
+  echo "features=$features_status"
+  echo "native_dependencies=$native_dependencies_status"
+  echo "licenses=$licenses_status"
+  echo "promoted_pin_changed=no"
 } | tee "$output_dir/summary.txt"

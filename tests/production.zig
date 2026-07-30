@@ -219,11 +219,20 @@ test "memory VFS supports an isolated database lifecycle" {
 }
 
 test "non-database input reports the native not-a-database taxonomy" {
+    const invalid_database =
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n" ++
+        "this is deliberately not a SQLite or Turso database\n";
     var temporary = std.testing.tmpDir(.{});
     defer temporary.cleanup();
     try temporary.dir.writeFile(std.testing.io, .{
         .sub_path = "notadb.db",
-        .data = "this is deliberately not a SQLite or Turso database\n" ** 8,
+        .data = invalid_database,
     });
     const path = try temporaryPath(&temporary, std.testing.allocator, "notadb.db");
     defer std.testing.allocator.free(path);

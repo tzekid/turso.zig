@@ -44,8 +44,7 @@ case "$arch" in
     x86_64)
         expected_uname=x86_64
         expected_apk_arch=x86_64
-        zig_archive=zig-x86_64-linux-0.16.0.tar.xz
-        zig_sha256=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+        zig_asset=x86_64-linux
         zig_target=x86_64-linux-musl
         rust_target=x86_64-unknown-linux-musl
         cpu_baseline=x86-64-v1
@@ -54,8 +53,7 @@ case "$arch" in
     aarch64)
         expected_uname=aarch64
         expected_apk_arch=aarch64
-        zig_archive=zig-aarch64-linux-0.16.0.tar.xz
-        zig_sha256=ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
+        zig_asset=aarch64-linux
         zig_target=aarch64-linux-musl
         rust_target=aarch64-unknown-linux-musl
         cpu_baseline=armv8-a
@@ -108,13 +106,27 @@ git -C "$repo_root" checkout --detach "$source_commit"
 [[ -z "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]] ||
     { echo "musl release checkout is dirty" >&2; exit 1; }
 
+zig_version=$(sed -n -E 's/^[[:space:]]*\.minimum_zig_version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$repo_root/build.zig.zon" | head -1)
+upstream_version=$(sed -n -E 's/^pub const upstream = "([^"]+)";/\1/p' "$repo_root/src/version.zig" | head -1)
+upstream_tag=$(sed -n -E 's/^pub const upstream_tag(:[^=]+)? = "([^"]+)";/\2/p' "$repo_root/src/version.zig" | head -1)
+upstream_commit=$(sed -n -E 's/^pub const upstream_commit(:[^=]+)? = "([^"]+)";/\2/p' "$repo_root/src/version.zig" | head -1)
+upstream_tag_object=$(sed -n -E 's/^pub const upstream_tag_object(:[^=]+)? = "([^"]+)";/\2/p' "$repo_root/src/version.zig" | head -1)
+[[ "$zig_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+[[ "$upstream_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+[[ "$upstream_tag" == "v$upstream_version" ]]
+
 git clone --filter=blob:none --no-checkout https://github.com/tursodatabase/turso.git "$upstream_root"
-git -C "$upstream_root" checkout --detach 4a88feb7caef869c16f6215b6dc51eafd5b3e54e
-[[ "$(git -C "$upstream_root" rev-parse 'v0.7.1^{tag}')" == 31cdceeb07d3b294e5b2f13b03cfdbbf59769b78 ]]
-[[ "$(git -C "$upstream_root" rev-parse 'v0.7.1^{commit}')" == 4a88feb7caef869c16f6215b6dc51eafd5b3e54e ]]
+git -C "$upstream_root" checkout --detach "$upstream_commit"
+[[ "$(git -C "$upstream_root" rev-parse "$upstream_tag^{tag}")" == "$upstream_tag_object" ]]
+[[ "$(git -C "$upstream_root" rev-parse "$upstream_tag^{commit}")" == "$upstream_commit" ]]
 
 curl --fail --location --silent --show-error \
-    "https://ziglang.org/download/0.16.0/$zig_archive" \
+    https://ziglang.org/download/index.json -o "$work_root/zig-index.json"
+zig_url=$(jq -er --arg version "$zig_version" --arg asset "$zig_asset" '.[$version][$asset].tarball' "$work_root/zig-index.json")
+zig_sha256=$(jq -er --arg version "$zig_version" --arg asset "$zig_asset" '.[$version][$asset].shasum' "$work_root/zig-index.json")
+zig_archive=$(basename "$zig_url")
+curl --fail --location --silent --show-error \
+    "$zig_url" \
     -o "$work_root/$zig_archive"
 printf '%s  %s\n' "$zig_sha256" "$work_root/$zig_archive" | sha256sum --check -
 mkdir -p "$toolchain_root"
@@ -122,14 +134,16 @@ tar -xJf "$work_root/$zig_archive" -C "$toolchain_root" --strip-components=1
 
 mkdir -p "$cargo_home" "$rustup_home"
 CARGO_HOME="$cargo_home" RUSTUP_HOME="$rustup_home" \
-    rustup-init -y --profile minimal --default-toolchain 1.88.0 --no-modify-path
+    rustup-init -y --profile minimal --default-toolchain "$(awk -F'\"' '/^channel = "/ { print $2; exit }' "$upstream_root/rust-toolchain.toml")" --no-modify-path
 export PATH="$toolchain_root:$cargo_home/bin:$PATH"
 export CARGO_HOME="$cargo_home"
 export RUSTUP_HOME="$rustup_home"
-export RUSTUP_TOOLCHAIN=1.88.0
-export SOURCE_DATE_EPOCH=1784727869
+export RUSTUP_TOOLCHAIN
+RUSTUP_TOOLCHAIN=$(awk -F'"' '/^channel = "/ { print $2; exit }' "$upstream_root/rust-toolchain.toml")
+export SOURCE_DATE_EPOCH
+SOURCE_DATE_EPOCH=$(git -C "$upstream_root" show -s --format=%ct "$upstream_commit")
 
-[[ "$(zig version)" == 0.16.0 ]]
+[[ "$(zig version)" == "$zig_version" ]]
 rustc -Vv
 cargo -V
 

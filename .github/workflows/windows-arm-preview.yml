@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZIG_VERSION: 0.16.0
+  ZIG_VERSION: 0.17.0-dev.1509+bb296ab9b
   RUST_TOOLCHAIN: "1.88"
   CARGO_TERM_COLOR: always
 

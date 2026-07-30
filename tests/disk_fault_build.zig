@@ -28,6 +28,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = .{
+            .cwd_relative = b.pathJoin(&.{ project_root, "include/turso.h" }),
+        },
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_c.addIncludePath(.{
+        .cwd_relative = b.pathJoin(&.{ project_root, "include" }),
+    });
+    turso_module.addImport("turso_c", translate_c.createModule());
     turso_module.addIncludePath(.{
         .cwd_relative = b.pathJoin(&.{ project_root, "include" }),
     });

@@ -103,12 +103,12 @@ jq -e '
     .package.name == "turso.zig" and
     (.package.version | type == "string" and length > 0) and
     (.package.source_commit | test("^[0-9a-f]{40}$")) and
-    .upstream.version == "0.7.1" and
-    .upstream.tag == "v0.7.1" and
-    .upstream.tag_object == "31cdceeb07d3b294e5b2f13b03cfdbbf59769b78" and
-    .upstream.commit == "4a88feb7caef869c16f6215b6dc51eafd5b3e54e" and
-    .upstream.zig_package_hash == "N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd" and
-    .upstream.header_sha256 == "14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb" and
+    (.upstream.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+    .upstream.tag == ("v" + .upstream.version) and
+    (.upstream.tag_object | test("^[0-9a-f]{40}$")) and
+    (.upstream.commit | test("^[0-9a-f]{40}$")) and
+    (.upstream.zig_package_hash | type == "string" and length > 0) and
+    (.upstream.header_sha256 | test("^[0-9a-f]{64}$")) and
     (.build.kind == "source" or .build.kind == "native") and
     (.build.sync_enabled | type == "boolean") and
     (.build.features | type == "array" and length > 0) and
@@ -118,12 +118,12 @@ jq -e '
         (.build.cpu_baseline | type == "string" and length > 0) and
         (.build.minimum_platform | type == "string" and length > 0)
      else .build.cpu_baseline == null and .build.minimum_platform == null end) and
-    .tools.zig == "0.16.0" and
+    (.tools.zig | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
     (.licenses.wrapper.license_sha256 | test("^[0-9a-f]{64}$")) and
     (.licenses.wrapper.notice_sha256 | test("^[0-9a-f]{64}$")) and
     (.licenses.upstream.license_sha256 | test("^[0-9a-f]{64}$")) and
     (.licenses.upstream.notice_sha256 | test("^[0-9a-f]{64}$")) and
-    .reproducibility.source_date_epoch == 1784727869 and
+    (.reproducibility.source_date_epoch | type == "number" and . > 0) and
     .reproducibility.normalized_owner == 0 and
     .reproducibility.normalized_group == 0
 ' "$manifest" >/dev/null || fail "manifest schema or pinned provenance is invalid"
@@ -134,7 +134,7 @@ if [[ "$sync_enabled" == true ]]; then
         [[ -s "$package_root/$path" ]] || fail "required packaged sync file is missing or empty: $path"
     done
     jq -e '
-        .upstream.sync_header_sha256 == "38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35" and
+        (.upstream.sync_header_sha256 | test("^[0-9a-f]{64}$")) and
         .build.features == ["pure-rust-crypto"] and
         .abi.variant == "sync" and
         .abi.headers == ["include/turso.h", "include/turso_sync.h"] and

@@ -9,11 +9,12 @@ fail() {
 }
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+zig_bin=${ZIG:-zig}
 [[ $(uname -s) == Linux ]] || fail "the syscall interposition fixture requires Linux"
 getconf GNU_LIBC_VERSION >/dev/null 2>&1 ||
     fail "the syscall interposition fixture requires glibc"
 command -v cc >/dev/null 2>&1 || fail "cc is required"
-command -v zig >/dev/null 2>&1 || fail "zig is required"
+command -v "$zig_bin" >/dev/null 2>&1 || fail "Zig executable is required: $zig_bin"
 
 case $(uname -m) in
     x86_64) rust_target=x86_64-unknown-linux-gnu ;;
@@ -42,7 +43,7 @@ cc \
     -ldl \
     -o "$shim"
 
-zig build \
+"$zig_bin" build \
     --cache-dir "$repo_root/.zig-cache" \
     example-basic \
     -Dlinkage=dynamic \
@@ -55,10 +56,10 @@ native_library="$native_lib_dir/libturso_sdk_kit.so"
     fail "expected native library was not built"
 
 fixture_prefix="$temporary_root/fixture"
-zig build \
+ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/zig}" \
+    "$zig_bin" build \
     --build-file "$repo_root/tests/disk_fault_build.zig" \
     --cache-dir "$temporary_root/zig-cache" \
-    --global-cache-dir "${ZIG_GLOBAL_CACHE_DIR:-$HOME/.cache/zig}" \
     --prefix "$fixture_prefix" \
     -Dproject-root="$repo_root" \
     -Dnative-lib-dir="$native_lib_dir" \

@@ -165,14 +165,14 @@ pub const Row = struct {
     pub fn scan(self: Row, destinations: anytype) DecodeError!void {
         const info = @typeInfo(@TypeOf(destinations));
         if (info != .@"struct" or !info.@"struct".is_tuple) return error.TypeMismatch;
-        const fields = info.@"struct".fields;
-        if (fields.len != self.column_count) return error.ColumnCountMismatch;
-        inline for (fields, 0..) |field, index| {
-            const Pointer = @typeInfo(field.type);
-            if (Pointer != .pointer or Pointer.pointer.size != .one or Pointer.pointer.is_const) {
+        const struct_info = info.@"struct";
+        if (struct_info.field_names.len != self.column_count) return error.ColumnCountMismatch;
+        inline for (struct_info.field_names, struct_info.field_types, 0..) |field_name, field_type, index| {
+            const Pointer = @typeInfo(field_type);
+            if (Pointer != .pointer or Pointer.pointer.size != .one or Pointer.pointer.attrs.@"const") {
                 return error.TypeMismatch;
             }
-            const destination = @field(destinations, field.name);
+            const destination = @field(destinations, field_name);
             destination.* = try decode_mod.valueAs(Pointer.pointer.child, try self.value(index), null);
         }
     }
@@ -188,27 +188,27 @@ pub const Row = struct {
     ) DecodeError!T {
         const info = @typeInfo(T);
         if (info != .@"struct") return error.TypeMismatch;
-        const fields = info.@"struct".fields;
-        if (self.column_count < fields.len) return error.MissingColumn;
-        if (!options.allow_extra_columns and self.column_count != fields.len) {
+        const struct_info = info.@"struct";
+        if (self.column_count < struct_info.field_names.len) return error.MissingColumn;
+        if (!options.allow_extra_columns and self.column_count != struct_info.field_names.len) {
             return error.ColumnCountMismatch;
         }
         if (info.@"struct".is_tuple and options.mode == .by_name) return error.TypeMismatch;
 
         var result: T = undefined;
         var initialized: usize = 0;
-        errdefer inline for (fields, 0..) |field, index| {
+        errdefer inline for (struct_info.field_names, struct_info.field_types, 0..) |field_name, field_type, index| {
             if (index < initialized) {
-                decode_mod.deinitValue(field.type, &@field(result, field.name), allocator);
+                decode_mod.deinitValue(field_type, &@field(result, field_name), allocator);
             }
         };
 
-        inline for (fields, 0..) |field, position| {
+        inline for (struct_info.field_names, struct_info.field_types, 0..) |field_name, field_type, position| {
             const index = if (options.mode == .by_position)
                 position
             else
-                try self.findColumn(field.name);
-            @field(result, field.name) = try decode_mod.valueAs(field.type, try self.value(index), allocator);
+                try self.findColumn(field_name);
+            @field(result, field_name) = try decode_mod.valueAs(field_type, try self.value(index), allocator);
             initialized += 1;
         }
         return result;

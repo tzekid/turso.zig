@@ -8,6 +8,13 @@ is pre-1.0.
 
 ### Added
 
+- Added exact Zig-master and Turso-main target manifests, resolver and
+  consistency tooling, fixture-backed candidate classification, daily
+  maintenance automation, deduplicated assigned issues, and routine draft pull
+  requests.
+- Added stable-publication guards that reject development compilers,
+  prerelease Turso inputs, missing tag provenance, dirty trees, and development
+  branches.
 - Added structured parameterized batches with explicit atomic/non-atomic
   transaction policy, partial failure reports, per-entry change/row-ID
   metadata, and bounded allocator-owned row materialization.
@@ -26,6 +33,15 @@ is pre-1.0.
 
 ### Changed
 
+- Kept the binding version at `0.1.1` while moving `master` to Zig
+  `0.17.0-dev.1509+bb296ab9b` and Turso main commit
+  `6e527a75595576790566f3d36560fbe95c5d87a2` (`0.8.0-pre.2`).
+- Replaced removed Zig C imports with build-owned translated C modules and
+  adapted build paths, type reflection, allocator calls, enum names, and test
+  syntax for Zig 0.17 development.
+- Audited Turso's internal async-open/VFS refactor and sync protocol
+  auto-detection. Public base declarations and symbols are unchanged; the sync
+  header change is comment-only.
 - Made prepared SELECT statements reusable through `Statement.query` and
   `queryParams`, with heap-stable Rows leases and multiple idle statements per
   Connection while preserving one active execution.

@@ -99,7 +99,7 @@ pub const StandardTransport = struct {
         }
 
         var response = try client_request.receiveHead(&.{});
-        try response_writer.setStatus(@intFromEnum(response.head.status));
+        try response_writer.setStatus(@backingInt(response.head.status));
 
         var body = response.reader(&.{});
         var buffer: [16 * 1024]u8 = undefined;

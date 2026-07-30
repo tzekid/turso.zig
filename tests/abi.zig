@@ -1,5 +1,6 @@
 const std = @import("std");
-const raw = @import("turso_raw").c;
+const turso_raw = @import("turso_raw");
+const raw = turso_raw.c;
 
 extern fn turso_zig_probe_size_slice_ref() usize;
 extern fn turso_zig_probe_align_slice_ref() usize;
@@ -131,12 +132,8 @@ test "vendored upstream header body has the pinned digest" {
     const start = std.mem.indexOf(u8, vendored, "#ifndef TURSO_H") orelse return error.HeaderBodyMissing;
     var actual: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(vendored[start..], &actual, .{});
-    const expected = [_]u8{
-        0x14, 0xee, 0x49, 0xb4, 0xf6, 0xc0, 0x0e, 0x3f,
-        0x8c, 0x3c, 0x71, 0x0b, 0x4d, 0xf1, 0xc3, 0x16,
-        0xec, 0xc0, 0x80, 0x2e, 0x1d, 0x8b, 0x19, 0x81,
-        0x5d, 0x8c, 0xaa, 0xb0, 0x9f, 0x2b, 0x70, 0xcb,
-    };
+    var expected: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, turso_raw.version.upstream_header_sha256);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
 }
 
@@ -378,8 +375,8 @@ fn expectOffset(
 
 fn assertCFunction(comptime function: anytype, comptime parameter_count: usize) void {
     const info = @typeInfo(@TypeOf(function)).@"fn";
-    if (info.params.len != parameter_count) @compileError("pinned SDK Kit function arity changed");
-    if (std.meta.activeTag(info.calling_convention) != std.meta.activeTag(std.builtin.CallingConvention.c)) {
+    if (info.param_types.len != parameter_count) @compileError("pinned SDK Kit function arity changed");
+    if (std.meta.activeTag(info.attrs.@"callconv") != std.meta.activeTag(std.builtin.CallingConvention.c)) {
         @compileError("SDK Kit declaration lost the C calling convention");
     }
 }
@@ -388,8 +385,8 @@ fn assertCFunctionPointer(comptime Pointer: type, comptime parameter_count: usiz
     const optional_info = @typeInfo(Pointer).optional;
     const pointer_info = @typeInfo(optional_info.child).pointer;
     const function_info = @typeInfo(pointer_info.child).@"fn";
-    if (function_info.params.len != parameter_count) @compileError("pinned SDK Kit callback arity changed");
-    if (std.meta.activeTag(function_info.calling_convention) != std.meta.activeTag(std.builtin.CallingConvention.c)) {
+    if (function_info.param_types.len != parameter_count) @compileError("pinned SDK Kit callback arity changed");
+    if (std.meta.activeTag(function_info.attrs.@"callconv") != std.meta.activeTag(std.builtin.CallingConvention.c)) {
         @compileError("SDK Kit callback declaration lost the C calling convention");
     }
 }

@@ -1,7 +1,7 @@
 # turso.zig
 
 [![CI](https://github.com/tzekid/turso.zig/actions/workflows/ci.yml/badge.svg)](https://github.com/tzekid/turso.zig/actions/workflows/ci.yml)
-[![Zig 0.16.0](https://img.shields.io/badge/Zig-0.16.0-f7a41d)](https://ziglang.org/download/)
+[![Zig master (pinned)](https://img.shields.io/badge/Zig-master%20(pinned)-f7a41d)](https://ziglang.org/download/)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A small, unofficial Zig binding for the
@@ -48,7 +48,7 @@ workload and keep backups of data you care about.
 
 The default build needs:
 
-- Zig 0.16.0
+- Zig `0.17.0-dev.1509+bb296ab9b` (the exact promoted `master` snapshot)
 - Rust and Cargo 1.88 or newer
 - a C toolchain
 
@@ -61,7 +61,15 @@ zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
 The first build can take a while because the default backend compiles Turso
 from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
-The `master` branch contains unreleased `0.1.1` work and pins SDK Kit `v0.7.1`.
+The `master` branch contains unreleased `0.1.1` work and pins Turso
+`main` commit `6e527a75595576790566f3d36560fbe95c5d87a2` (declared upstream
+version `0.8.0-pre.2`). Development pins are exact and reproducible even though
+their discovery channels move.
+
+The locked `v0.1.1-stable` branch preserves binding `0.1.1`, Zig `0.16.0`, and
+Turso `v0.7.1`. It is not modified by nightly maintenance. Stable publication
+from any future stable branch requires stable versions of both upstreams and
+real Turso tag provenance.
 If you want to try the code documented on the current branch:
 
 ```sh
@@ -447,6 +455,7 @@ uses fixtures, is in [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md).
 - [Managed callbacks](docs/CALLBACKS.md)
 - [Platform support](docs/PLATFORMS.md)
 - [Test matrix](docs/TEST_MATRIX.md)
+- [Development target specification](docs/DEVELOPMENT_CHANNELS.md)
 - [Pinned upstream ABI](docs/UPSTREAM_ABI.md)
 - [Updating Turso](docs/UPDATING_TURSO.md)
 - [Release process](docs/RELEASING.md)
@@ -459,4 +468,4 @@ Generate the API reference with `zig build docs`; it is written under
 ## License
 
 MIT. The vendored Turso headers and the source-built native library are also
-MIT; [NOTICE](NOTICE) records their exact upstream tag, commit, and hashes.
+MIT; [NOTICE](NOTICE) records their exact upstream channel, commit, and hashes.

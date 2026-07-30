@@ -1,5 +1,6 @@
 const std = @import("std");
-const raw = @import("turso_sync").raw.c;
+const turso_sync = @import("turso_sync");
+const raw = turso_sync.raw.c;
 
 extern fn turso_zig_sync_probe_size_io_http_request() usize;
 extern fn turso_zig_sync_probe_align_io_http_request() usize;
@@ -76,12 +77,8 @@ test "vendored sync header body has the pinned digest" {
     const start = std.mem.indexOf(u8, vendored, "#ifndef TURSO_SYNC_H") orelse return error.HeaderBodyMissing;
     var actual: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(vendored[start..], &actual, .{});
-    const expected = [_]u8{
-        0x38, 0xb9, 0xdc, 0x73, 0xfc, 0x2f, 0xe4, 0x5c,
-        0x3d, 0x86, 0xd6, 0x9f, 0xf2, 0xad, 0x48, 0xb8,
-        0xc9, 0x9d, 0x69, 0x3a, 0x44, 0x62, 0x51, 0x4e,
-        0xa5, 0x0f, 0xb8, 0x76, 0xab, 0xa6, 0xee, 0x35,
-    };
+    var expected: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&expected, turso_sync.version.upstream_sync_header_sha256);
     try std.testing.expectEqualSlices(u8, &expected, &actual);
 }
 
@@ -309,8 +306,8 @@ fn expectOffset(
 
 fn assertCFunction(comptime function: anytype, comptime parameter_count: usize) void {
     const info = @typeInfo(@TypeOf(function)).@"fn";
-    if (info.params.len != parameter_count) @compileError("pinned sync SDK Kit function arity changed");
-    if (std.meta.activeTag(info.calling_convention) != std.meta.activeTag(std.builtin.CallingConvention.c)) {
+    if (info.param_types.len != parameter_count) @compileError("pinned sync SDK Kit function arity changed");
+    if (std.meta.activeTag(info.attrs.@"callconv") != std.meta.activeTag(std.builtin.CallingConvention.c)) {
         @compileError("sync SDK Kit declaration lost the C calling convention");
     }
 }

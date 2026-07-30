@@ -62,21 +62,21 @@ pub const Status = enum(u32) {
             else => @compileError("Turso status must be an integer"),
         }
         const value = std.math.cast(u32, code) orelse return error.UnexpectedStatus;
-        return @enumFromInt(value);
+        return @fromBackingInt(@intCast(value));
     }
 
     /// Convert either an integer or a C/native enum value. Kept separate from
     /// `fromInt` so accidental non-integer inputs fail at compile time.
     pub fn fromRaw(code: anytype) Error!Status {
         return switch (@typeInfo(@TypeOf(code))) {
-            .@"enum" => fromInt(@intFromEnum(code)),
+            .@"enum" => fromInt(@backingInt(code)),
             .int, .comptime_int => fromInt(code),
             else => @compileError("Turso status must be an integer or enum"),
         };
     }
 
     pub fn toInt(self: Status) u32 {
-        return @intFromEnum(self);
+        return @backingInt(self);
     }
 
     /// Classify a status into a successful control result or a stable error.

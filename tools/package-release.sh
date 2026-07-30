@@ -202,6 +202,9 @@ tar --version 2>/dev/null | head -1 | grep -q 'GNU tar' || fail "deterministic p
 
 source_root=$(canonical_dir "$source_root")
 upstream_root=$(canonical_dir "$upstream_root")
+"$source_root/tools/check-release-inputs.sh" \
+    --source-root "$source_root" \
+    --upstream-root "$upstream_root"
 mkdir -p -- "$stage_root" "$output_dir"
 stage_root=$(canonical_dir "$stage_root")
 output_dir=$(canonical_dir "$output_dir")
@@ -266,7 +269,7 @@ grep -F "$header_sha" "$source_root/NOTICE" >/dev/null || fail "NOTICE lacks the
 source_commit=$(git -C "$source_root" rev-parse HEAD)
 fingerprint=$(sed -n -E 's/^[[:space:]]*\.fingerprint[[:space:]]*=[[:space:]]*([^,]+),.*/\1/p' "$source_root/build.zig.zon" | head -1)
 package_hash=$(sed -n -E 's/^[[:space:]]*\.hash[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$source_root/build.zig.zon" | head -1)
-source_epoch=1784727869
+source_epoch=$(git -C "$upstream_root" show -s --format=%ct "$upstream_commit")
 [[ -n "$fingerprint" && -n "$package_hash" ]] || fail "package fingerprint or upstream package hash is missing"
 
 if [[ -z "$features" ]]; then
@@ -284,7 +287,8 @@ fi
 if [[ -z "$zig_version" ]]; then require_command zig; zig_version=$(zig version); fi
 if [[ -z "$rust_version" ]]; then require_command rustc; rust_version=$(rustc -V); fi
 if [[ -z "$cargo_version" ]]; then require_command cargo; cargo_version=$(cargo -V); fi
-[[ "$zig_version" == 0.16.0 ]] || fail "release requires Zig 0.16.0, got: $zig_version"
+[[ "$zig_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    fail "release requires a stable Zig compiler, got: $zig_version"
 
 native_path=
 native_sha=

@@ -115,7 +115,7 @@ remain source-compatible.
 
 ## Feature configuration
 
-`FeatureSet` exposes every token parsed by the pinned v0.7.1 SDK Kit:
+`FeatureSet` exposes every token parsed by the promoted SDK Kit commit:
 `views`, `index_method`, `custom_types`, `autovacuum`, `vacuum`, `encryption`,
 `attach`, `generated_columns`, `multiprocess_wal`, `without_rowid`, and
 `mvcc_passive_checkpoint`. Enabled typed fields render once in that canonical

@@ -31,6 +31,20 @@ pub fn build(b: *std.Build) void {
         "native-artifact",
         "Build and install the selected source-mode SDK Kit artifact",
     );
+    const base_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/turso.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    base_translate_c.addIncludePath(b.path("include"));
+    const base_c_module = base_translate_c.createModule();
+    const sync_translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("include/turso_sync.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sync_translate_c.addIncludePath(b.path("include"));
+    const sync_c_module = sync_translate_c.createModule();
 
     const native = configureNative(b, .{
         .mode = native_mode,
@@ -47,7 +61,7 @@ pub fn build(b: *std.Build) void {
         .native_artifact_step = native_artifact_step,
     });
 
-    const abi_symbols_command = b.addSystemCommand(&.{ "bash", b.pathFromRoot("tools/check-abi-symbols.sh") });
+    const abi_symbols_command = b.addSystemCommand(&.{ "bash", absolutePath(b, "tools/check-abi-symbols.sh") });
     if (sync) abi_symbols_command.addArg("--sync");
     switch (native) {
         .exact_file => |exact| abi_symbols_command.addFileArg(exact.file),
@@ -65,10 +79,12 @@ pub fn build(b: *std.Build) void {
     }
     const abi_symbols_step = b.step("test-abi-symbols", "Check the exact selected SDK Kit symbol manifest");
     abi_symbols_step.dependOn(&abi_symbols_command.step);
-    const disk_fault_command = b.addSystemCommand(&.{ "bash", b.pathFromRoot("tools/check-disk-fault.sh") });
+    const disk_fault_command = b.addSystemCommand(&.{ "bash", absolutePath(b, "tools/check-disk-fault.sh") });
+    disk_fault_command.setEnvironmentVariable("ZIG", b.graph.zig_exe);
     const disk_fault_step = b.step("test-disk-fault", "Run isolated Linux ENOSPC and short-write fault injection");
     disk_fault_step.dependOn(&disk_fault_command.step);
-    const compile_32_command = b.addSystemCommand(&.{ "bash", b.pathFromRoot("tools/check-32bit-compile.sh") });
+    const compile_32_command = b.addSystemCommand(&.{ "bash", absolutePath(b, "tools/check-32bit-compile.sh") });
+    compile_32_command.setEnvironmentVariable("ZIG", b.graph.zig_exe);
     const compile_32_step = b.step("test-32bit-compile", "Compile native-facing safety paths for a 32-bit usize target");
     compile_32_step.dependOn(&compile_32_command.step);
 
@@ -77,14 +93,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    configureModule(b, raw_module, native, target.result, linkage, sync, build_options_module);
+    configureModule(b, raw_module, native, target.result, linkage, sync, build_options_module, base_c_module, sync_c_module);
 
     const turso_module = b.addModule("turso", .{
         .root_source_file = b.path("src/turso.zig"),
         .target = target,
         .optimize = optimize,
     });
-    configureModule(b, turso_module, native, target.result, linkage, sync, build_options_module);
+    configureModule(b, turso_module, native, target.result, linkage, sync, build_options_module, base_c_module, sync_c_module);
 
     const sync_module = if (sync) blk: {
         const module = b.addModule("turso_sync", .{
@@ -92,7 +108,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        configureModule(b, module, native, target.result, linkage, true, build_options_module);
+        configureModule(b, module, native, target.result, linkage, true, build_options_module, base_c_module, sync_c_module);
         break :blk module;
     } else null;
 
@@ -111,6 +127,7 @@ pub fn build(b: *std.Build) void {
     });
     docs_turso_module.addIncludePath(b.path("include"));
     docs_turso_module.addImport("turso_build_options", build_options_module);
+    addCImports(docs_turso_module, base_c_module, sync_c_module, false);
     docs_turso_module.link_libc = true;
     const docs_turso = b.addObject(.{
         .name = "turso-docs",
@@ -130,6 +147,7 @@ pub fn build(b: *std.Build) void {
     });
     docs_sync_module.addIncludePath(b.path("include"));
     docs_sync_module.addImport("turso_build_options", build_options_module);
+    addCImports(docs_sync_module, base_c_module, sync_c_module, true);
     docs_sync_module.link_libc = true;
     const docs_sync = b.addObject(.{
         .name = "turso-sync-docs",
@@ -307,7 +325,7 @@ pub fn build(b: *std.Build) void {
             });
             const sync_e2e_command = b.addSystemCommand(&.{
                 "bash",
-                b.pathFromRoot("tools/check-sync-e2e.sh"),
+                absolutePath(b, "tools/check-sync-e2e.sh"),
             });
             sync_e2e_command.addArtifactArg(sync_e2e);
             sync_e2e_command.addArg(server);
@@ -366,7 +384,7 @@ pub fn build(b: *std.Build) void {
     const build_soak_step = b.step("build-soak", "Install the configurable soak executable without running it");
     build_soak_step.dependOn(&install_soak.step);
     const run_soak = b.addRunArtifact(soak_executable);
-    if (b.args) |args| run_soak.addArgs(args);
+    run_soak.addPassthruArgs();
     const soak_step = b.step("soak", "Run configurable lifecycle/concurrency soak: zig build soak -- [iterations workers seed]");
     soak_step.dependOn(&run_soak.step);
     const run_short_soak = b.addRunArtifact(soak_executable);
@@ -490,6 +508,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    addCImports(statement_io_module, base_c_module, sync_c_module, false);
     statement_io_module.addIncludePath(b.path("include"));
     statement_io_module.link_libc = true;
     const statement_io_tests = b.addTest(.{
@@ -503,7 +522,7 @@ pub fn build(b: *std.Build) void {
     });
     statement_io_tests.root_module.addCSourceFile(.{
         .file = b.path("tests/fixtures/statement_io.c"),
-        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
     });
     statement_io_tests.root_module.link_libc = true;
     const run_statement_io_tests = b.addRunArtifact(statement_io_tests);
@@ -520,7 +539,7 @@ pub fn build(b: *std.Build) void {
     });
     abi_tests.root_module.addCSourceFile(.{
         .file = b.path("tests/abi_probe.c"),
-        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
     });
     const run_abi_tests = b.addRunArtifact(abi_tests);
     run_abi_tests.setCwd(b.path("."));
@@ -544,7 +563,7 @@ pub fn build(b: *std.Build) void {
         });
         sync_abi_tests.root_module.addCSourceFile(.{
             .file = b.path("tests/sync_abi_probe.c"),
-            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
         });
         const run_sync_abi_tests = b.addRunArtifact(sync_abi_tests);
         run_sync_abi_tests.setCwd(b.path("."));
@@ -556,6 +575,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         sync_lifecycle_module.addImport("turso_build_options", pinned_build_options_module);
+        addCImports(sync_lifecycle_module, base_c_module, sync_c_module, true);
         sync_lifecycle_module.addIncludePath(b.path("include"));
         sync_lifecycle_module.link_libc = true;
         const sync_lifecycle_tests = b.addTest(.{
@@ -570,7 +590,7 @@ pub fn build(b: *std.Build) void {
         sync_lifecycle_tests.root_module.addIncludePath(b.path("include"));
         sync_lifecycle_tests.root_module.addCSourceFile(.{
             .file = b.path("tests/fixtures/sync_lifecycle.c"),
-            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
         });
         sync_lifecycle_tests.root_module.link_libc = true;
         const run_sync_lifecycle_tests = b.addRunArtifact(sync_lifecycle_tests);
@@ -583,6 +603,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         sync_transport_module.addImport("turso_build_options", pinned_build_options_module);
+        addCImports(sync_transport_module, base_c_module, sync_c_module, true);
         sync_transport_module.addIncludePath(b.path("include"));
         sync_transport_module.link_libc = true;
         const sync_transport_tests = b.addTest(.{
@@ -597,7 +618,7 @@ pub fn build(b: *std.Build) void {
         sync_transport_tests.root_module.addIncludePath(b.path("include"));
         sync_transport_tests.root_module.addCSourceFile(.{
             .file = b.path("tests/fixtures/sync_transport.c"),
-            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
         });
         sync_transport_tests.root_module.link_libc = true;
         const run_sync_transport_tests = b.addRunArtifact(sync_transport_tests);
@@ -616,7 +637,7 @@ pub fn build(b: *std.Build) void {
         sync_path_safety_tests.root_module.addIncludePath(b.path("include"));
         sync_path_safety_tests.root_module.addCSourceFile(.{
             .file = b.path("tests/fixtures/sync_transport.c"),
-            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+            .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
         });
         sync_path_safety_tests.root_module.link_libc = true;
         const run_sync_path_safety_tests = b.addRunArtifact(sync_path_safety_tests);
@@ -634,6 +655,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     mismatch_turso_module.addImport("turso_build_options", pinned_build_options_module);
+    addCImports(mismatch_turso_module, base_c_module, sync_c_module, false);
     mismatch_turso_module.addIncludePath(b.path("include"));
     mismatch_turso_module.link_libc = true;
     const mismatch_tests = b.addTest(.{
@@ -647,7 +669,7 @@ pub fn build(b: *std.Build) void {
     });
     mismatch_tests.root_module.addCSourceFile(.{
         .file = b.path("tests/fixtures/mismatched_version.c"),
-        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
     });
     const run_mismatch_tests = b.addRunArtifact(mismatch_tests);
     abi_step.dependOn(&run_mismatch_tests.step);
@@ -658,6 +680,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     ffi_module.addIncludePath(b.path("include"));
+    addCImports(ffi_module, base_c_module, sync_c_module, false);
     ffi_module.link_libc = true;
     const ffi_ownership_tests = b.addTest(.{
         .name = "turso-ffi-ownership-tests",
@@ -667,13 +690,14 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "ffi", .module = ffi_module },
+                .{ .name = "turso_c", .module = base_c_module },
             },
         }),
     });
     ffi_ownership_tests.root_module.addIncludePath(b.path("include"));
     ffi_ownership_tests.root_module.addCSourceFile(.{
         .file = b.path("tests/fixtures/ffi_ownership.c"),
-        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
     });
     ffi_ownership_tests.root_module.link_libc = true;
     const run_ffi_ownership_tests = b.addRunArtifact(ffi_ownership_tests);
@@ -685,6 +709,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     partial_turso_module.addImport("turso_build_options", pinned_build_options_module);
+    addCImports(partial_turso_module, base_c_module, sync_c_module, false);
     partial_turso_module.addIncludePath(b.path("include"));
     partial_turso_module.link_libc = true;
     const partial_database_tests = b.addTest(.{
@@ -698,7 +723,7 @@ pub fn build(b: *std.Build) void {
     });
     partial_database_tests.root_module.addCSourceFile(.{
         .file = b.path("tests/fixtures/partial_database.c"),
-        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{b.pathFromRoot("include")}) },
+        .flags = &.{ "-std=c11", "-Werror", b.fmt("-I{s}", .{absolutePath(b, "include")}) },
     });
     partial_database_tests.root_module.link_libc = true;
     const run_partial_database_tests = b.addRunArtifact(partial_database_tests);
@@ -721,7 +746,17 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    configureModule(b, runtime_unit_compile.root_module, native, target.result, linkage, sync, build_options_module);
+    configureModule(
+        b,
+        runtime_unit_compile.root_module,
+        native,
+        target.result,
+        linkage,
+        sync,
+        build_options_module,
+        base_c_module,
+        sync_c_module,
+    );
     const runtime_unit_tests = b.addRunArtifact(runtime_unit_compile);
     const ergonomics_tests = addTestRun(b, "turso-ergonomics-tests", b.path("tests/ergonomics.zig"), target, optimize, &.{
         .{ .name = "turso", .module = turso_module },
@@ -926,7 +961,7 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
             }
 
             const source_root: std.Build.LazyPath = if (config.turso_source) |path|
-                .{ .cwd_relative = absolutePath(b, path) }
+                b.graph.cwdRelativePath(absolutePath(b, path))
             else blk: {
                 const dependency = b.lazyDependency("turso_native", .{}) orelse return .{
                     .search = .{ .directory = null, .add_rpath = false },
@@ -934,111 +969,64 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
                 break :blk dependency.path("");
             };
             const rust_target = config.rust_target_override orelse rustTarget(config.target.result);
-            const profile = if (config.optimize == .Debug) "dev" else "lib-release";
-            const profile_directory = if (config.optimize == .Debug) "debug" else "lib-release";
+            const profile = if (config.optimize == .debug) "dev" else "lib-release";
+            const profile_directory = if (config.optimize == .debug) "debug" else "lib-release";
             const feature_key = featureCacheKey(config.encryption, config.fts);
             const native_name = nativeLibraryName(config.sync);
-            const configured_cache_root = b.cache_root.path orelse ".zig-cache";
-            const absolute_cache_root = if (std.fs.path.isAbsolute(configured_cache_root))
-                configured_cache_root
-            else
-                b.pathFromRoot(configured_cache_root);
-            const cargo_target_path = if (config.target.result.abi == .musl)
-                b.pathJoin(&.{ absolute_cache_root, b.pathJoin(&.{
+            const cargo_target_subpath = if (config.target.result.abi == .musl)
+                b.pathJoin(&.{
                     "turso-cargo",
                     native_name,
                     rust_target,
                     profile_directory,
                     feature_key,
                     @tagName(config.linkage),
-                }) })
+                })
             else
-                b.pathJoin(&.{ absolute_cache_root, b.pathJoin(&.{
+                b.pathJoin(&.{
                     "turso-cargo",
                     native_name,
                     rust_target,
                     profile_directory,
                     feature_key,
-                }) });
+                });
+            const cargo_target_path = std.Build.LazyPath.cache_root.path(b, cargo_target_subpath);
 
             const cargo = b.addSystemCommand(&.{
-                "cargo",
+                "bash",
+                absolutePath(b, "tools/run-cargo-build.sh"),
+            });
+            cargo.addDirectoryArg(source_root);
+            cargo.addDirectoryArg(cargo_target_path);
+            cargo.addArg(cargoHomePath(b) orelse "-");
+            cargo.addArg(if (config.target.result.os.tag == .windows) "windows" else "unix");
+            cargo.addArg(rust_target);
+            cargo.addArg(if (config.target.result.abi == .musl and config.linkage == .dynamic) "true" else "false");
+            cargo.addArgs(&.{
                 "build",
                 "--locked",
                 "-p",
                 native_name,
                 "--target",
                 rust_target,
-                "--target-dir",
-                cargo_target_path,
             });
             cargo.addArgs(&.{ "--profile", profile, "--no-default-features" });
             if (featureList(b, config.encryption, config.fts, config.sync)) |features| {
                 cargo.addArgs(&.{ "--features", features });
             }
-            cargo.setCwd(source_root);
             cargo.setEnvironmentVariable("CARGO_TERM_COLOR", "always");
             // Upstream's build script otherwise embeds the current time and watches
             // whichever enclosing Git repository Cargo happens to discover. Pinning
             // the tagged commit time makes artifacts reproducible and cache-stable.
-            cargo.setEnvironmentVariable("SOURCE_DATE_EPOCH", "1784727869");
-            // Keep release artifacts independent of the local checkout, Zig
-            // cache, Cargo registry, and home-directory locations. Preserve
-            // caller flags while appending the deterministic prefix maps.
-            const dependency_root = source_root.getPath(b);
+            cargo.setEnvironmentVariable("SOURCE_DATE_EPOCH", "1785419245");
             const cargo_home = cargoHomePath(b);
-            const remap_flags = if (cargo_home) |path|
-                b.fmt(
-                    "--remap-path-prefix={s}=/turso-src\x1f--remap-path-prefix={s}=/turso-target\x1f--remap-path-prefix={s}=/cargo-home",
-                    .{ dependency_root, cargo_target_path, path },
-                )
-            else
-                b.fmt(
-                    "--remap-path-prefix={s}=/turso-src\x1f--remap-path-prefix={s}=/turso-target",
-                    .{ dependency_root, cargo_target_path },
-                );
-            // Rust's musl targets default to a static C runtime and silently
-            // drop cdylib output. A shared SDK Kit must opt out; use a distinct
-            // Cargo cache key above so switching linkage cannot reuse artifacts
-            // compiled under the opposite CRT policy.
-            const binding_rust_flags = if (config.target.result.abi == .musl and config.linkage == .dynamic)
-                b.fmt("{s}\x1f-C\x1ftarget-feature=-crt-static", .{remap_flags})
-            else
-                remap_flags;
-            if (b.graph.environ_map.get("CARGO_ENCODED_RUSTFLAGS")) |inherited| {
-                cargo.setEnvironmentVariable(
-                    "CARGO_ENCODED_RUSTFLAGS",
-                    if (inherited.len == 0) binding_rust_flags else b.fmt("{s}\x1f{s}", .{ inherited, binding_rust_flags }),
-                );
-            } else {
-                cargo.setEnvironmentVariable(
-                    "CARGO_ENCODED_RUSTFLAGS",
-                    if (b.graph.environ_map.get("RUSTFLAGS")) |inherited|
-                        if (inherited.len == 0)
-                            binding_rust_flags
-                        else
-                            b.fmt("{s}\x1f{s}", .{ encodeWhitespaceSeparatedRustFlags(b, inherited), binding_rust_flags })
-                    else
-                        binding_rust_flags,
-                );
-            }
-            setCargoNativeRemapFlags(
-                b,
-                cargo,
-                config.target.result.os.tag,
-                rust_target,
-                dependency_root,
-                cargo_target_path,
-                cargo_home,
-            );
 
             const filename = nativeLibraryFilename(config.target.result, config.linkage, config.sync);
-            const built_library: std.Build.LazyPath = .{ .cwd_relative = b.pathJoin(&.{
-                cargo_target_path,
+            const built_library = cargo_target_path.path(b, b.pathJoin(&.{
                 rust_target,
                 profile_directory,
                 filename,
-            }) };
+            }));
 
             // Cargo needs a stable target directory for incremental rebuilds, while Zig
             // needs a generated LazyPath to order native compilation before consumers.
@@ -1055,7 +1043,7 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
                     b,
                     staged_library,
                     filename,
-                    dependency_root,
+                    source_root,
                     cargo_target_path,
                     cargo_home,
                 )
@@ -1069,12 +1057,11 @@ fn configureNative(b: *std.Build, config: NativeConfig) NativeLibrary {
                 b.getInstallStep().dependOn(&install_library.step);
                 if (config.target.result.os.tag == .windows) {
                     const dll_name = b.fmt("{s}.dll", .{native_name});
-                    const built_dll: std.Build.LazyPath = .{ .cwd_relative = b.pathJoin(&.{
-                        cargo_target_path,
+                    const built_dll = cargo_target_path.path(b, b.pathJoin(&.{
                         rust_target,
                         profile_directory,
                         dll_name,
-                    }) };
+                    }));
                     const dll = staged.addCopyFile(built_dll, dll_name);
                     const install_dll = b.addInstallFileWithDir(dll, .bin, dll_name);
                     b.getInstallStep().dependOn(&install_dll.step);
@@ -1093,8 +1080,8 @@ fn sanitizeStaticArchive(
     b: *std.Build,
     source: std.Build.LazyPath,
     filename: []const u8,
-    dependency_root: []const u8,
-    cargo_target_path: []const u8,
+    dependency_root: std.Build.LazyPath,
+    cargo_target_path: std.Build.LazyPath,
     cargo_home: ?[]const u8,
 ) std.Build.LazyPath {
     const sanitizer = b.addExecutable(.{
@@ -1102,14 +1089,15 @@ fn sanitizeStaticArchive(
         .root_module = b.createModule(.{
             .root_source_file = b.path("tools/sanitize_static_archive.zig"),
             .target = b.graph.host,
-            .optimize = .ReleaseSafe,
+            .optimize = .safe,
         }),
     });
     const run = b.addRunArtifact(sanitizer);
     run.addArg(b.graph.zig_exe);
     run.addFileArg(source);
     const output = run.addOutputFileArg(filename);
-    run.addArgs(&.{ dependency_root, cargo_target_path });
+    run.addDirectoryArg(dependency_root);
+    run.addDirectoryArg(cargo_target_path);
     if (cargo_home) |path| run.addArg(path);
     return output;
 }
@@ -1121,7 +1109,7 @@ fn normalizeMacOSDynamicLibrary(
 ) std.Build.LazyPath {
     const run = b.addSystemCommand(&.{
         "bash",
-        b.pathFromRoot("tools/normalize-macos-dylib.sh"),
+        absolutePath(b, "tools/normalize-macos-dylib.sh"),
     });
     run.addFileArg(source);
     const output = run.addOutputFileArg(filename);
@@ -1137,81 +1125,6 @@ fn cargoHomePath(b: *std.Build) ?[]const u8 {
         return b.pathJoin(&.{ home, ".cargo" });
     }
     return null;
-}
-
-fn setCargoNativeRemapFlags(
-    b: *std.Build,
-    cargo: *std.Build.Step.Run,
-    os: std.Target.Os.Tag,
-    rust_target: []const u8,
-    dependency_root: []const u8,
-    cargo_target_path: []const u8,
-    cargo_home: ?[]const u8,
-) void {
-    const option_prefix = if (os == .windows) "/pathmap:" else "-ffile-prefix-map=";
-    const source_flag = shellQuoteFlag(
-        b,
-        b.fmt("{s}{s}=/turso-src", .{ option_prefix, dependency_root }),
-    );
-    const target_flag = shellQuoteFlag(
-        b,
-        b.fmt("{s}{s}=/turso-target", .{ option_prefix, cargo_target_path }),
-    );
-    const remap_flags = if (cargo_home) |path|
-        b.fmt("{s} {s} {s}", .{
-            source_flag,
-            target_flag,
-            shellQuoteFlag(b, b.fmt("{s}{s}=/cargo-home", .{ option_prefix, path })),
-        })
-    else
-        b.fmt("{s} {s}", .{ source_flag, target_flag });
-
-    // The cc crate normally splits flags on ASCII whitespace. Shell parsing
-    // keeps prefix-map options intact when a checkout path contains spaces.
-    cargo.setEnvironmentVariable("CC_SHELL_ESCAPED_FLAGS", "1");
-    inline for (.{ "CFLAGS", "CXXFLAGS" }) |prefix| {
-        const key = cargoTargetEnvironmentKey(b, prefix, rust_target);
-        if (b.graph.environ_map.get(key)) |inherited| {
-            cargo.setEnvironmentVariable(
-                key,
-                if (inherited.len == 0)
-                    remap_flags
-                else
-                    b.fmt("{s} {s}", .{ inherited, remap_flags }),
-            );
-        } else {
-            cargo.setEnvironmentVariable(key, remap_flags);
-        }
-    }
-}
-
-fn cargoTargetEnvironmentKey(
-    b: *std.Build,
-    prefix: []const u8,
-    rust_target: []const u8,
-) []const u8 {
-    const normalized = b.allocator.dupe(u8, rust_target) catch @panic("OOM");
-    std.mem.replaceScalar(u8, normalized, '-', '_');
-    return b.fmt("{s}_{s}", .{ prefix, normalized });
-}
-
-fn shellQuoteFlag(b: *std.Build, flag: []const u8) []const u8 {
-    const escaped = std.mem.replaceOwned(
-        u8,
-        b.allocator,
-        flag,
-        "'",
-        "'\\''",
-    ) catch @panic("OOM");
-    return b.fmt("'{s}'", .{escaped});
-}
-
-fn encodeWhitespaceSeparatedRustFlags(b: *std.Build, input: []const u8) []const u8 {
-    const output = b.allocator.dupe(u8, input) catch @panic("OOM");
-    std.mem.replaceScalar(u8, output, ' ', 0x1f);
-    std.mem.replaceScalar(u8, output, '\t', 0x1f);
-    std.mem.replaceScalar(u8, output, '\n', 0x1f);
-    return output;
 }
 
 fn sourceTargetRunsOnHost(target: std.Build.ResolvedTarget, host: std.Build.ResolvedTarget) bool {
@@ -1235,9 +1148,12 @@ fn configureModule(
     linkage: std.builtin.LinkMode,
     sync: bool,
     build_options: *std.Build.Module,
+    base_c_module: *std.Build.Module,
+    sync_c_module: *std.Build.Module,
 ) void {
     module.addIncludePath(b.path("include"));
     module.addImport("turso_build_options", build_options);
+    addCImports(module, base_c_module, sync_c_module, sync);
     module.link_libc = true;
 
     switch (native) {
@@ -1270,6 +1186,16 @@ fn configureModule(
     }
 
     if (linkage == .static) linkStaticPlatformLibraries(module, target);
+}
+
+fn addCImports(
+    module: *std.Build.Module,
+    base_c_module: *std.Build.Module,
+    sync_c_module: *std.Build.Module,
+    sync: bool,
+) void {
+    module.addImport("turso_c", base_c_module);
+    if (sync) module.addImport("turso_sync_c", sync_c_module);
 }
 
 fn featureList(b: *std.Build, encryption: bool, fts: bool, sync: bool) ?[]const u8 {
@@ -1369,7 +1295,10 @@ fn linkStaticPlatformLibraries(module: *std.Build.Module, target: std.Target) vo
 }
 
 fn absolutePath(b: *std.Build, path: []const u8) []const u8 {
-    return if (std.fs.path.isAbsolute(path)) path else b.pathFromRoot(path);
+    return if (std.fs.path.isAbsolute(path))
+        path
+    else
+        b.root.joinString(b.allocator, path) catch @panic("OOM");
 }
 
 fn readWorkspaceVersion(b: *std.Build, source_path: []const u8) []const u8 {
