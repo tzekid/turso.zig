@@ -1,0 +1,7 @@
+1/6 abi.test.all pinned enum constants retain their ABI values...OK
+2/6 abi.test.vendored upstream header body has the pinned digest...OK
+3/6 abi.test.core public structs retain C layout...OK
+4/6 abi.test.independent C probe agrees with every public base struct layout...OK
+5/6 abi.test.all base SDK entry points retain function arity and C calling convention...OK
+6/6 abi.test.raw ABI executes SELECT 1...OK
+All 6 tests passed.

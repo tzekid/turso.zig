@@ -1,0 +1,15 @@
+header=unchanged
+sync_header=unchanged
+generated_raw=unchanged
+generated_sync_raw=unchanged
+candidate_build_exit=0
+exported_symbols=compatible
+raw_select_1_smoke=passed
+native_static_links=captured
+safe_suite=passed
+sync_suite=passed
+behavior_audit=unchanged
+features=unchanged
+native_dependencies=unchanged
+licenses=unchanged
+promoted_pin_changed=no

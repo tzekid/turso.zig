@@ -1,10 +1,3 @@
-/*
- * Vendored from https://github.com/tursodatabase/turso/blob/e99973a43e906325f46f27e6bd3fa404dd5dd31b/sdk-kit/turso.h
- * Upstream channel: main
- * Upstream commit: e99973a43e906325f46f27e6bd3fa404dd5dd31b
- * Copyright the Turso project contributors. Licensed under the MIT License.
- * The upstream header follows unchanged below this attribution block.
- */
 #ifndef TURSO_H
 #define TURSO_H
 

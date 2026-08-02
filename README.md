@@ -33,7 +33,7 @@ from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
 `master` is the moving development channel. It contains unreleased `0.1.1`
 work and currently pins the promoted Zig `master` snapshot above plus Turso
-`main` commit `6e527a75595576790566f3d36560fbe95c5d87a2` (declared upstream
+`main` commit `e99973a43e906325f46f27e6bd3fa404dd5dd31b` (declared upstream
 version `0.8.0-pre.2`). Until those inputs stabilize, `master` is the latest
 code rather than a release candidate. Its pins remain exact and reproducible:
 

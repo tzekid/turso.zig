@@ -8,7 +8,7 @@ The detailed stable baseline below is pinned to final annotated tag `v0.7.1` (ta
 release commit.
 
 `master` currently promotes development channel `main` at commit
-`6e527a75595576790566f3d36560fbe95c5d87a2`, declared version
+`e99973a43e906325f46f27e6bd3fa404dd5dd31b`, declared version
 `0.8.0-pre.2`. The base header body remains byte-identical to the stable
 baseline. The sync header changes comments only; its promoted body digest is
 `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1`.

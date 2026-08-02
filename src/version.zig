@@ -5,7 +5,7 @@ pub const minimum_zig = "0.17.0-dev.1509+bb296ab9b";
 
 pub const upstream = "0.8.0-pre.2";
 pub const upstream_channel = "main";
-pub const upstream_commit = "6e527a75595576790566f3d36560fbe95c5d87a2";
+pub const upstream_commit = "e99973a43e906325f46f27e6bd3fa404dd5dd31b";
 pub const upstream_tag: ?[]const u8 = null;
 pub const upstream_tag_object: ?[]const u8 = null;
 pub const upstream_header_sha256 = "14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb";

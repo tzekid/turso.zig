@@ -13,11 +13,11 @@ consumers have passed the target-native CI matrix.
 | Rust | `1.88` |
 | Turso development version | `0.8.0-pre.2` |
 | Turso channel | `main` |
-| Turso commit | `6e527a75595576790566f3d36560fbe95c5d87a2` |
-| Zig package hash | `N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr` |
+| Turso commit | `e99973a43e906325f46f27e6bd3fa404dd5dd31b` |
+| Zig package hash | `N-V-__8AAENi3wKTg86MeIZppqc3LdC7BjR6h5ZfImor8FOk` |
 | `turso.h` body SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
 | `turso_sync.h` body SHA-256 | `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1` |
-| Reproducible source epoch | `1785419245` |
+| Reproducible source epoch | `1785563505` |
 
 These are the reproducible development inputs on `master`, not release
 candidates. `tools/check-release-inputs.sh` rejects the `-dev` Zig compiler,

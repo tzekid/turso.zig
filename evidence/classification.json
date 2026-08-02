@@ -1,0 +1,10 @@
+{
+  "classification": "routine",
+  "upstream": "turso",
+  "old_revision": "6e527a75595576790566f3d36560fbe95c5d87a2",
+  "new_revision": "e99973a43e906325f46f27e6bd3fa404dd5dd31b",
+  "dedupe_key": "turso:e99973a43e906325f46f27e6bd3fa404dd5dd31b",
+  "reasons": [
+    "candidate revision differs from the promoted revision"
+  ]
+}

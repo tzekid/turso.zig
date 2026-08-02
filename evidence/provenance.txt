@@ -1,0 +1,5 @@
+promoted_channel=main
+promoted_version=0.8.0-pre.2
+promoted_commit=6e527a75595576790566f3d36560fbe95c5d87a2
+candidate_commit=e99973a43e906325f46f27e6bd3fa404dd5dd31b
+checked_at=2026-08-02T05:37:05Z

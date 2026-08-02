@@ -1,0 +1,15 @@
+[0m[1m[33mwarning[0m[0m[1m: unused import: `crate::translate::collate::CollationSeq`[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0mcore/vdbe/mod.rs:43:9[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m43[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0mpub use crate::translate::collate::CollationSeq;[0m
+[0m   [0m[0m[1m[38;5;12m|[0m[0m         [0m[0m[1m[33m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m   [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: `#[warn(unused_imports)]` on by default[0m
+
+[1m[33mwarning[0m[1m:[0m `turso_core` (lib) generated 1 warning (run `cargo fix --lib -p turso_core` to apply 1 suggestion)
+[1m[32m   Compiling[0m turso_sdk_kit v0.8.0-pre.2 (/home/runner/work/turso.zig/turso.zig/candidate-turso/sdk-kit)
+[0m[1m[38;5;10mnote[0m[0m[1m: Link against the following native artifacts when linking against this static library. The order and any duplication can be significant on some platforms.[0m
+
+[0m[1m[38;5;10mnote[0m[0m[1m: native-static-libs: -ldl -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc[0m
+
+[1m[32m    Finished[0m `lib-release` profile [optimized] target(s) in 3.33s

@@ -12,7 +12,7 @@ include/turso.h is copied from:
   Source: https://github.com/tursodatabase/turso
   Development channel: main
   Declared version: 0.8.0-pre.2
-  Commit: 6e527a75595576790566f3d36560fbe95c5d87a2
+  Commit: e99973a43e906325f46f27e6bd3fa404dd5dd31b
   Path: sdk-kit/turso.h
   Upstream body SHA-256: 14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb
   License: MIT
