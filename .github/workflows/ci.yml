@@ -15,8 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ZIG_VERSION: 0.17.0-dev.1509+bb296ab9b
-  RUST_TOOLCHAIN: "1.88"
   CARGO_TERM_COLOR: always
 
 defaults:
@@ -121,10 +119,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Record promoted environment
@@ -140,8 +142,8 @@ jobs:
       - name: Verify formatting and shell scripts
         run: |
           zig fmt --check build.zig src tests examples bench tools/*.zig
-          bash -n tools/*.sh tests/release-package*.sh
-          shellcheck tools/*.sh tests/release-package*.sh
+          bash -n tools/*.sh tests/*.sh
+          shellcheck tools/*.sh tests/*.sh
 
       - name: Run native-independent tests
         run: |
@@ -158,6 +160,7 @@ jobs:
           test "$(zig version)" = "$ZIG_VERSION"
           tools/check-development-targets.sh
           tests/classify-development-targets.sh
+          tests/development-target-lifecycle.sh
           if tools/check-release-inputs.sh --skip-tree-state --skip-ref 2>release-guard.log; then
             echo "development inputs unexpectedly passed the stable release guard" >&2
             exit 1
@@ -177,10 +180,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install pinned Rust toolchain
@@ -245,10 +252,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install pinned Rust toolchain
@@ -303,10 +314,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install pinned Rust toolchain
@@ -365,10 +380,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install pinned Rust toolchain
@@ -414,10 +433,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install pinned Rust toolchain

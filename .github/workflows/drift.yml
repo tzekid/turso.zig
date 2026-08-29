@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "23 4 * * *"
   workflow_dispatch:
+    inputs:
+      mutate:
+        description: Create or update GitHub issues, branches, and draft pull requests
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -13,8 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZIG_VERSION: 0.17.0-dev.1509+bb296ab9b
-  RUST_TOOLCHAIN: "1.88"
   CARGO_TERM_COLOR: always
 
 defaults:
@@ -41,10 +45,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install promoted Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Resolve candidates
@@ -73,7 +81,7 @@ jobs:
         with:
           name: development-candidate
           path: candidate.json
-          retention-days: 7
+          retention-days: 30
 
   zig-candidate:
     name: Zig master candidate
@@ -93,6 +101,10 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: development-candidate
+
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
 
       - name: Install candidate Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -156,7 +168,7 @@ jobs:
         with:
           name: zig-candidate-evidence
           path: evidence/
-          retention-days: 7
+          retention-days: 30
 
   turso-candidate:
     name: Turso main candidate
@@ -185,10 +197,14 @@ jobs:
           path: candidate-turso
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install promoted Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install pinned Rust toolchain
@@ -233,12 +249,14 @@ jobs:
         with:
           name: turso-candidate-evidence
           path: ${{ runner.temp }}/turso-evidence/
-          retention-days: 7
+          retention-days: 30
 
   resolver-failure:
     name: Report resolver infrastructure failure
     needs: resolve
-    if: always() && needs.resolve.result == 'failure'
+    if: >-
+      always() && needs.resolve.result == 'failure' &&
+      (github.event_name == 'schedule' || inputs.mutate == true)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -248,7 +266,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           marker="development-target:resolver:infrastructure"
@@ -265,19 +282,20 @@ jobs:
           fi
           gh issue create --repo "$REPOSITORY" \
             --title "Development target resolver infrastructure failure" \
-            --assignee "$OWNER" \
             --label upstream-maintenance \
             --body "<!-- $marker -->
 
           The retried candidate resolver failed before producing trustworthy evidence.
 
           Workflow: $RUN_URL"
-          exit 1
 
   release-events:
     name: Report new stable ${{ matrix.upstream }} release
     needs: resolve
-    if: needs.resolve.result == 'success' && (needs.resolve.outputs.zig_release == 'true' || needs.resolve.outputs.turso_release == 'true')
+    if: >-
+      needs.resolve.result == 'success' &&
+      (github.event_name == 'schedule' || inputs.mutate == true) &&
+      (needs.resolve.outputs.zig_release == 'true' || needs.resolve.outputs.turso_release == 'true')
     strategy:
       fail-fast: false
       matrix:
@@ -298,7 +316,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           UPSTREAM: ${{ matrix.upstream }}
           REVISION: ${{ matrix.revision }}
@@ -307,6 +324,7 @@ jobs:
           gh label create upstream-maintenance --repo "$REPOSITORY" --color B60205 --force
           gh label create "$UPSTREAM" --repo "$REPOSITORY" --color 1D76DB --force
           gh label create release-candidate --repo "$REPOSITORY" --color 0E8A16 --force
+          gh label create needs-human --repo "$REPOSITORY" --color B60205 --force
           number=$(
             gh issue list --repo "$REPOSITORY" --state all --limit 100 \
               --label upstream-maintenance --json number,body,state \
@@ -314,20 +332,12 @@ jobs:
               head -1
           )
           if test -n "$number"; then
-            state=$(gh issue view "$number" --repo "$REPOSITORY" --json state --jq .state)
-            if test "$state" = CLOSED; then
-              gh issue reopen "$number" --repo "$REPOSITORY"
-              gh issue comment "$number" --repo "$REPOSITORY" \
-                --body "This release has not been acknowledged in the monitor baseline. Evidence: $RUN_URL"
-              exit 1
-            fi
-            echo "Issue #$number already covers this release; duplicate notification suppressed."
+            echo "Issue #$number already records this release; duplicate notification suppressed."
             exit 0
           fi
           gh issue create --repo "$REPOSITORY" \
             --title "$UPSTREAM stable release available: $REVISION" \
-            --assignee "$OWNER" \
-            --label "upstream-maintenance,$UPSTREAM,release-candidate" \
+            --label "upstream-maintenance,$UPSTREAM,release-candidate,needs-human" \
             --body "<!-- $marker -->
 
           A new stable $UPSTREAM release, **$REVISION**, is available.
@@ -335,7 +345,6 @@ jobs:
           This is a notification only. It does not modify \`master\`, \`v0.1.1-stable\`, a release tag, or the package version.
 
           Evidence: $RUN_URL"
-          exit 1
 
   act:
     name: Act on ${{ matrix.upstream }} candidate
@@ -348,130 +357,222 @@ jobs:
           - upstream: zig
             classification: ${{ needs.zig-candidate.outputs.classification }}
             revision: ${{ needs.resolve.outputs.zig_version }}
-            stable_revision: ${{ needs.resolve.outputs.zig_stable }}
           - upstream: turso
             classification: ${{ needs.turso-candidate.outputs.classification }}
             revision: ${{ needs.resolve.outputs.turso_commit }}
-            stable_revision: ${{ needs.resolve.outputs.turso_stable }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
+      actions: write
       contents: write
       issues: write
       pull-requests: write
+    env:
+      MUTATE: ${{ github.event_name == 'schedule' || inputs.mutate == true }}
     steps:
-      - name: Ignore unchanged or skipped candidate
-        if: matrix.classification == '' || matrix.classification == 'no-change'
-        run: echo "No action is required for ${{ matrix.upstream }}."
+      - name: Summarize dry run or skipped candidate
+        if: env.MUTATE != 'true' || matrix.classification == ''
+        run: |
+          echo "Mutation enabled: $MUTATE"
+          echo "${{ matrix.upstream }} classification: ${{ matrix.classification || 'skipped' }}"
 
-      - name: Check out project for mutation
-        if: matrix.classification != '' && matrix.classification != 'no-change'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require default branch for mutations
+        if: env.MUTATE == 'true'
+        run: test "$GITHUB_REF_NAME" = master
 
-      - name: Download candidate record
-        if: matrix.classification != '' && matrix.classification != 'no-change'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: development-candidate
-
-      - name: Download candidate evidence
-        if: matrix.classification != '' && matrix.classification != 'no-change'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ matrix.upstream }}-candidate-evidence
-          path: evidence
-
-      - name: Open or update routine draft
-        if: matrix.classification == 'routine'
+      - name: Close a resolved maintenance tracker
+        if: env.MUTATE == 'true' && matrix.classification == 'no-change'
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           UPSTREAM: ${{ matrix.upstream }}
-          REVISION: ${{ matrix.revision }}
         run: |
-          branch="automation/$UPSTREAM-development-target"
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git switch -C "$branch"
-          tools/apply-development-target.sh "$UPSTREAM" candidate.json
-          git add --all
-          git commit -m "chore: update $UPSTREAM development target to $REVISION"
-          remote_revision=$(
-            git ls-remote --heads origin "refs/heads/$branch" |
-              awk 'NR == 1 { print $1 }'
-          )
-          if test -n "$remote_revision"; then
-            git push \
-              --force-with-lease="refs/heads/$branch:$remote_revision" \
-              --set-upstream origin "$branch"
-          else
-            git push --set-upstream origin "$branch"
-          fi
-          existing=$(gh pr list --state open --head "$branch" --json number --jq '.[0].number // empty')
-          if test -z "$existing"; then
-            gh pr create --draft \
-              --base master \
-              --head "$branch" \
-              --title "chore: update $UPSTREAM development target" \
-              --body "Automated routine candidate update to \`$REVISION\`. Review the attached workflow evidence before merging."
-          else
-            gh pr comment "$existing" --body "Updated the routine candidate to \`$REVISION\`."
-          fi
-
-      - name: Open deduplicated maintenance issue
-        if: matrix.classification == 'maintenance-required' || matrix.classification == 'release-event' || matrix.classification == 'infrastructure-failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          UPSTREAM: ${{ matrix.upstream }}
-          REVISION: ${{ matrix.revision }}
-          STABLE_REVISION: ${{ matrix.stable_revision }}
-          CLASSIFICATION: ${{ matrix.classification }}
-          OWNER: ${{ github.repository_owner }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          if test "$CLASSIFICATION" = release-event; then REVISION="$STABLE_REVISION"; fi
-          marker="development-target:$UPSTREAM:$REVISION:$CLASSIFICATION"
-          gh label create upstream-maintenance --color B60205 --force
-          gh label create "$UPSTREAM" --color 1D76DB --force
-          if test "$CLASSIFICATION" = release-event; then
-            gh label create release-candidate --color 0E8A16 --force
-          fi
-          breaking=false
-          if test "$CLASSIFICATION" = maintenance-required &&
-              jq -e '.reasons[] | test("ABI|version family|format|compile|behavior"; "i")' \
-                evidence/classification.json >/dev/null; then
-            gh label create breaking-change --color D93F0B --force
-            breaking=true
-          fi
+          marker="development-target:$UPSTREAM:maintenance-required"
           number=$(
-            gh issue list --state all --limit 100 \
-              --label upstream-maintenance \
-              --json number,body,state \
-              --jq ".[] | select(.body | contains(\"$marker\")) | .number" |
+            gh issue list --repo "$REPOSITORY" --state open --limit 100 \
+              --label upstream-maintenance --json number,body \
+              --jq ".[] | select(.body | contains(\"<!-- $marker -->\")) | .number" |
               head -1
           )
           if test -n "$number"; then
-            state=$(gh issue view "$number" --json state --jq .state)
-            if test "$state" = CLOSED; then
-              gh issue reopen "$number"
-              gh issue comment "$number" --body "The same unresolved candidate is relevant again. Evidence: $RUN_URL"
-              exit 1
-            fi
-            echo "Issue #$number already covers this candidate; suppressing duplicate notification."
-            exit 0
+            gh issue close "$number" --repo "$REPOSITORY" --reason completed
+          else
+            echo "No open $UPSTREAM maintenance tracker needs closing."
           fi
+
+      - name: Check out project for mutation
+        if: >-
+          env.MUTATE == 'true' && matrix.classification != '' &&
+          matrix.classification != 'no-change'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download candidate record
+        if: >-
+          env.MUTATE == 'true' && matrix.classification != '' &&
+          matrix.classification != 'no-change'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: development-candidate
+          path: ${{ runner.temp }}/development-candidate
+
+      - name: Download candidate evidence
+        if: >-
+          env.MUTATE == 'true' && matrix.classification != '' &&
+          matrix.classification != 'no-change'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.upstream }}-candidate-evidence
+          path: ${{ runner.temp }}/candidate-evidence
+
+      - name: Select the frozen work item
+        id: select
+        if: >-
+          env.MUTATE == 'true' && matrix.classification != '' &&
+          matrix.classification != 'no-change'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          UPSTREAM: ${{ matrix.upstream }}
+          CLASSIFICATION: ${{ matrix.classification }}
+          REVISION: ${{ matrix.revision }}
+        run: |
+          gh issue list --repo "$REPOSITORY" --state open --limit 100 \
+            --label upstream-maintenance --json number,body \
+            > "$RUNNER_TEMP/open-maintenance-issues.json"
+          gh pr list --repo "$REPOSITORY" --state open --limit 100 \
+            --label upstream-maintenance \
+            --json number,body,headRefName,url \
+            > "$RUNNER_TEMP/open-maintenance-pulls.json"
+          tools/select-development-target-work.sh \
+            "$UPSTREAM" "$CLASSIFICATION" "$REVISION" \
+            "$RUNNER_TEMP/open-maintenance-issues.json" \
+            "$RUNNER_TEMP/open-maintenance-pulls.json" \
+            > "$RUNNER_TEMP/work-selection.json"
+          jq . "$RUNNER_TEMP/work-selection.json" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "working_revision=$(jq -r .working_revision "$RUNNER_TEMP/work-selection.json")"
+            echo "issue_number=$(jq -r '.issue_number // ""' "$RUNNER_TEMP/work-selection.json")"
+            echo "pull_request_number=$(jq -r '.pull_request_number // ""' "$RUNNER_TEMP/work-selection.json")"
+            echo "pull_request_url=$(jq -r '.pull_request_url // ""' "$RUNNER_TEMP/work-selection.json")"
+            echo "pull_request_branch=$(jq -r '.pull_request_branch // ""' "$RUNNER_TEMP/work-selection.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Synchronize the maintenance tracker
+        id: tracker
+        if: >-
+          env.MUTATE == 'true' &&
+          (matrix.classification == 'maintenance-required' ||
+          matrix.classification == 'infrastructure-failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          UPSTREAM: ${{ matrix.upstream }}
+          CLASSIFICATION: ${{ matrix.classification }}
+          WORKING_REVISION: ${{ steps.select.outputs.working_revision }}
+          LATEST_REVISION: ${{ matrix.revision }}
+          PULL_REQUEST_URL: ${{ steps.select.outputs.pull_request_url }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          tools/sync-development-target-issue.sh \
+            "$UPSTREAM" "$CLASSIFICATION" "$WORKING_REVISION" "$LATEST_REVISION" \
+            "$RUN_URL" "$RUNNER_TEMP/candidate-evidence/classification.json" \
+            "$PULL_REQUEST_URL"
+
+      - name: Prepare one frozen draft pull request
+        id: prepare
+        if: >-
+          env.MUTATE == 'true' &&
+          (matrix.classification == 'routine' || matrix.classification == 'maintenance-required') &&
+          steps.select.outputs.pull_request_number == '' &&
+          steps.select.outputs.working_revision == matrix.revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          UPSTREAM: ${{ matrix.upstream }}
+          CLASSIFICATION: ${{ matrix.classification }}
+          REVISION: ${{ matrix.revision }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          slug=$(printf '%s' "$REVISION" | tr -c '[:alnum:]-' '-')
+          branch="automation/$UPSTREAM-${slug:0:32}"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -c "$branch"
+          tools/apply-development-target.sh \
+            "$UPSTREAM" "$RUNNER_TEMP/development-candidate/candidate.json"
+          git add --update
+          if git diff --cached --name-only | grep -q '^.github/workflows/'; then
+            echo "candidate update unexpectedly modifies workflow files" >&2
+            exit 1
+          fi
+          git diff --cached --quiet && {
+            echo "candidate update produced no tracked changes" >&2
+            exit 1
+          }
+          git commit -m "chore: update $UPSTREAM development target to $REVISION"
+          if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+            echo "refusing to overwrite existing branch $branch" >&2
+            exit 1
+          fi
+          git push --set-upstream origin "$branch"
+
+          gh label create upstream-maintenance --repo "$REPOSITORY" --color B60205 --force
+          gh label create "$UPSTREAM" --repo "$REPOSITORY" --color 1D76DB --force
           labels="upstream-maintenance,$UPSTREAM"
-          if test "$CLASSIFICATION" = release-event; then labels="$labels,release-candidate"; fi
-          if test "$breaking" = true; then labels="$labels,breaking-change"; fi
-          reasons=$(jq -r '.reasons[] | "- " + .' evidence/classification.json)
-          gh issue create \
-            --title "$UPSTREAM candidate requires attention: $REVISION" \
-            --assignee "$OWNER" \
-            --label "$labels" \
-            --body "$(printf '%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n' \
-              "<!-- $marker -->" \
-              "Classification: **$CLASSIFICATION**" \
-              "$reasons" \
-              "Evidence: $RUN_URL" \
-              "Reproduce locally:" \
-              "\`tools/resolve-development-targets.sh > candidate.json && tools/classify-development-target.sh $UPSTREAM tools/development-targets.json candidate.json evidence.json\`")"
-          exit 1
+          if test "$CLASSIFICATION" = maintenance-required; then
+            gh label create agent-maintenance --repo "$REPOSITORY" --color FBCA04 --force
+            labels="$labels,agent-maintenance"
+            if jq -e 'any(.reasons[]?; test("ABI|version family|format|compile|behavior"; "i"))' \
+                "$RUNNER_TEMP/candidate-evidence/classification.json" >/dev/null; then
+              gh label create breaking-change --repo "$REPOSITORY" --color D93F0B --force
+              labels="$labels,breaking-change"
+            fi
+          fi
+
+          body="$RUNNER_TEMP/development-target-pr.md"
+          {
+            printf '<!-- development-target-pr:%s:%s:%s -->\n' \
+              "$UPSTREAM" "$CLASSIFICATION" "$REVISION"
+            printf '<!-- development-target-working:%s:%s -->\n\n' "$UPSTREAM" "$REVISION"
+            printf 'Classification: **%s**\n\n' "$CLASSIFICATION"
+            printf "Frozen candidate: \`%s\`\n\n" "$REVISION"
+            printf 'Evidence: %s\n\n' "$RUN_URL"
+            printf '%s\n' 'This draft deliberately stays on the recorded candidate when the upstream channel moves.'
+            if test "$CLASSIFICATION" = maintenance-required; then
+              printf '%s\n' 'Compatibility, ownership, layout, or behavior changes require review and must not auto-merge.'
+            else
+              printf '%s\n' 'This is a provenance-only routine update; required CI remains authoritative.'
+            fi
+          } > "$body"
+          pr_url=$(gh pr create --repo "$REPOSITORY" --draft \
+            --base master --head "$branch" --label "$labels" \
+            --title "chore: update $UPSTREAM development target" --body-file "$body")
+          pr_number=${pr_url##*/}
+          {
+            echo "pr_url=$pr_url"
+            echo "pr_number=$pr_number"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+
+          gh workflow run ci.yml --repo "$REPOSITORY" --ref "$branch"
+
+      - name: Refresh the maintenance tracker with the draft pull request
+        if: >-
+          always() && env.MUTATE == 'true' &&
+          (matrix.classification == 'maintenance-required' ||
+          matrix.classification == 'infrastructure-failure') &&
+          steps.tracker.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          UPSTREAM: ${{ matrix.upstream }}
+          CLASSIFICATION: ${{ matrix.classification }}
+          WORKING_REVISION: ${{ steps.select.outputs.working_revision }}
+          LATEST_REVISION: ${{ matrix.revision }}
+          PULL_REQUEST_URL: ${{ steps.prepare.outputs.pr_url || steps.select.outputs.pull_request_url }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          tools/sync-development-target-issue.sh \
+            "$UPSTREAM" "$CLASSIFICATION" "$WORKING_REVISION" "$LATEST_REVISION" \
+            "$RUN_URL" "$RUNNER_TEMP/candidate-evidence/classification.json" \
+            "$PULL_REQUEST_URL"

@@ -60,11 +60,18 @@ require_text "pub const expected_runtime_version = \"$turso_version\";" src/buil
 require_text "SOURCE_DATE_EPOCH\", \"$turso_epoch\"" build.zig
 require_text ".minimum_zig_version = \"$zig_version\"" tests/consumer/build.zig.zon
 for workflow in ci drift extended release windows-arm-preview; do
-  require_text "ZIG_VERSION: $zig_version" ".github/workflows/$workflow.yml"
+  require_text "tools/export-development-targets.sh" ".github/workflows/$workflow.yml"
 done
-for workflow in ci drift extended; do
-  require_text "RUST_TOOLCHAIN: \"$rust_toolchain\"" ".github/workflows/$workflow.yml"
-done
+require_text "zig_version=\$(jq -er '.zig.version' \"\$manifest\")" tools/export-development-targets.sh
+require_text "rust_toolchain=\$(jq -er '.turso.rust_toolchain' \"\$manifest\")" tools/export-development-targets.sh
+if grep -R -F -- "$zig_version" "$repo_root/.github/workflows" >/dev/null; then
+  echo "workflow files must read the promoted Zig version from the manifest" >&2
+  exit 1
+fi
+if grep -R -F -- "RUST_TOOLCHAIN: \"$rust_toolchain\"" "$repo_root/.github/workflows" >/dev/null; then
+  echo "workflow files must read the promoted Rust toolchain from the manifest" >&2
+  exit 1
+fi
 require_text "$zig_version" README.md
 require_text "$turso_version" README.md
 require_text "$turso_commit" README.md

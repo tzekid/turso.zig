@@ -26,9 +26,10 @@ migration does not change the package version from `0.1.1`, publish a release,
 modify `v0.1.1-stable`, or expand the supported-platform contract.
 
 After the initial migration, scheduled automation will detect new candidates,
-classify them, and either prepare a routine update pull request or create a
-maintenance issue. Automation must never push directly to `master`, modify a
-stable branch, or publish a release.
+classify them, and prepare a frozen draft pull request for routine or
+maintenance work. Maintenance issues track one unresolved episode per upstream
+and update in place as newer revisions are observed. Automation must never push
+directly to `master`, modify a stable branch, or publish a release.
 
 ## 2. Goals
 
@@ -118,10 +119,11 @@ Automation must not:
 
 ### 4.5 Notification channel
 
-GitHub is the source of notification truth. Maintenance issues are assigned to
-the repository owner and GitHub routes notifications to the owner's configured
-Fastmail address. The address itself and any mail credentials must not be
-committed to the repository.
+GitHub is the source of notification truth. Maintenance issues remain
+unassigned while automation is working and are assigned or mention the owner
+only when a review or decision is required. GitHub routes that state change to
+the owner's configured Fastmail address. The address itself and any mail
+credentials must not be committed to the repository.
 
 The initial implementation does not require SMTP, a transactional email
 service, or a mailbox connector.
@@ -336,10 +338,10 @@ The Zig pull request must perform the following work in order.
 1. Resolve the latest official `master` version once.
 2. Verify all supported-host asset URLs and SHA-256 values.
 3. Record the exact candidate in the target manifest.
-4. Update `build.zig.zon`, `src/version.zig`, the consumer fixture, and
-   workflows to the same exact version.
-5. Ensure setup actions resolve that exact version rather than current
-   `master`.
+4. Update `build.zig.zon`, `src/version.zig`, and the consumer fixture to the
+   same exact version.
+5. Ensure hosted setup reads that exact version from the promoted manifest
+   rather than a duplicated workflow literal or current `master`.
 6. Update direct archive downloads to use the immutable URL from the official
    index instead of constructing stable-release paths.
 
@@ -504,7 +506,7 @@ Changes to any of these must classify as full code and sync impact:
 - `include/`;
 - symbol manifests;
 - upstream update tools; and
-- workflow version settings.
+- the hosted target exporter.
 
 CI evidence must print:
 
@@ -542,6 +544,8 @@ automation branch with a `--write` option.
 - Zig and Turso candidate tests run as independent jobs.
 - The expensive full matrix runs only for a changed candidate or manual
   dispatch.
+- Manual dispatch is read-only by default. GitHub mutation requires an explicit
+  input and is accepted only from `master`.
 - A weekly job still exercises the currently promoted pins even when no
   candidate changed.
 
@@ -553,7 +557,7 @@ Every candidate produces one of:
 | --- | --- | --- |
 | `no-change` | Candidate equals promoted pin | No issue or PR |
 | `routine` | Provenance-only change, allowlisted diff, all gates green | Draft PR; auto-merge eligible |
-| `maintenance-required` | Source, ABI, behavior, toolchain, or test work needed | Issue plus evidence; no merge |
+| `maintenance-required` | Source, ABI, behavior, toolchain, or test work needed | Frozen draft PR plus episode tracker; no auto-merge |
 | `release-event` | New stable Zig or Turso release detected | Planning issue only |
 | `infrastructure-failure` | Network, runner, rate-limit, or service failure | Retry, then infrastructure issue |
 
@@ -599,32 +603,35 @@ The following always require maintenance:
 
 ### 12.6 Pull requests and issues
 
-Automation branches use:
+Automation branches use candidate-specific names:
 
-- `automation/zig-development-target`; and
-- `automation/turso-development-target`.
+- `automation/zig-<revision>`; and
+- `automation/turso-<commit-prefix>`.
 
-Only one open automation pull request per upstream is allowed. New routine
-candidates update the existing pull request rather than creating noise.
+Only one open automation pull request per upstream is allowed. Its candidate is
+frozen when the pull request is created. Newer channel revisions update the
+episode tracker but do not retarget active work.
 
 Maintenance issues use labels:
 
 - `upstream-maintenance`;
 - `zig` or `turso`;
+- `agent-maintenance` for draft compatibility work;
 - `breaking-change` when applicable; and
 - `release-candidate` for stable upstream releases.
 
-The issue body must include old and new revisions, classification reasons,
-failing commands, links to logs/artifacts, relevant upstream commits, and a
-copy-paste local reproduction command. Issues are deduplicated by upstream and
-candidate revision.
+The issue body must include the frozen working revision, latest observed
+revision, classification reasons, links to retained logs/artifacts, and exact
+artifact download commands. Issues are deduplicated by upstream and
+classification episode. An issue alone does not freeze a candidate; the draft
+pull request does.
 
-## 13. Codex-assisted maintenance
+## 13. Agent-assisted maintenance
 
-Deterministic scripts and CI decide whether a candidate is green. Codex may
+Deterministic scripts and CI decide whether a candidate is green. An agent may
 assist only after evidence exists.
 
-For `maintenance-required`, Codex may:
+For `maintenance-required`, an agent may:
 
 - summarize relevant upstream commits;
 - group failures by likely root cause;
@@ -633,11 +640,11 @@ For `maintenance-required`, Codex may:
 - run the required checks in an isolated worktree; and
 - open or update a draft pull request.
 
-Codex-generated changes must remain draft and require human review when they
+Agent-generated changes must remain draft and require human review when they
 touch source, declarations, symbols, layouts, ownership, behavior, security,
 or platform claims.
 
-A future root `AGENTS.md` should encode:
+A future root `AGENTS.md` may encode:
 
 - never update Zig and Turso in one pull request;
 - never modify stable branches during nightly maintenance;
@@ -646,29 +653,32 @@ A future root `AGENTS.md` should encode:
 - supported-platform claims; and
 - the requirement to stop and report uncertain ABI or ownership semantics.
 
-Initially, a maintenance email leads to an explicit voice-driven Codex task.
-Unattended Codex diagnosis may be added later in a dedicated worktree after the
-first three maintenance events demonstrate that the evidence and prompts are
-reliable.
+Unattended diagnosis must follow
+`.github/automation/upstream-maintenance.md`, run in a dedicated worktree, use
+only trusted repository instructions, treat upstream text and issue contents as
+data, and stop with a precise `needs-human` state when ABI or ownership
+semantics cannot be inferred safely.
 
 ## 14. Notifications
 
 The notification mechanism is:
 
 1. scheduled GitHub Actions detects and classifies a candidate;
-2. routine green updates create or update a pull request without email noise;
-3. maintenance creates or updates an assigned GitHub issue;
-4. the responsible workflow ends with a clear failing/attention-required
-   summary; and
-5. GitHub sends the maintainer's configured notification email to Fastmail.
+2. routine green updates create one frozen draft pull request without email
+   noise;
+3. maintenance creates one frozen draft pull request and creates or silently
+   updates one unassigned episode tracker;
+4. expected maintenance leaves the monitor green; only broken automation or
+   infrastructure leaves it failing; and
+5. GitHub notifies the maintainer only when work is ready or needs a decision.
 
-The maintainer should enable GitHub Actions email notifications for failed
-workflows and issue assignment/mention notifications.
+The maintainer should enable GitHub Actions email notifications for genuine
+workflow failures and issue assignment/mention notifications.
 
-The automation must suppress duplicate messages for the same candidate. An
-infrastructure failure is retried before notification. A resolved maintenance
-issue is reopened only when the same unresolved candidate becomes relevant
-again.
+The automation must suppress duplicate messages throughout one unresolved
+episode, even as the upstream channel moves. An infrastructure failure is
+retried before notification. A later episode creates a new tracker instead of
+reopening an acknowledged historical issue.
 
 ## 15. Release separation
 
@@ -702,7 +712,7 @@ version decision.
 - Do not expose API keys or mailbox credentials to upstream builds or tests.
 - Pin third-party GitHub Actions to reviewed commit IDs.
 - Preserve deterministic path remapping and source epochs.
-- Retain candidate evidence for at least seven days.
+- Retain candidate evidence for at least thirty days.
 - Never weaken runtime-version rejection to make a candidate pass.
 
 ## 17. Delivery sequence
@@ -742,7 +752,7 @@ version decision.
 - Enable routine auto-merge only after the three classifications are manually
   confirmed.
 
-### Phase 5: optional Codex automation
+### Phase 5: optional agent automation
 
 - Add repository guidance and a reusable maintenance prompt or skill.
 - Test it on historical failure artifacts.

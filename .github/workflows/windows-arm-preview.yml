@@ -13,8 +13,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZIG_VERSION: 0.17.0-dev.1509+bb296ab9b
-  RUST_TOOLCHAIN: "1.88"
   CARGO_TERM_COLOR: always
 
 defaults:
@@ -32,10 +30,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read promoted development targets
+        id: targets
+        run: tools/export-development-targets.sh
+
       - name: Install native Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: ${{ env.ZIG_VERSION }}
+          version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
       - name: Install the native ARM64 Rust toolchain

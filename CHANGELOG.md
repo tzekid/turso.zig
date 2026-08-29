@@ -10,8 +10,8 @@ is pre-1.0.
 
 - Added exact Zig-master and Turso-main target manifests, resolver and
   consistency tooling, fixture-backed candidate classification, daily
-  maintenance automation, deduplicated assigned issues, and routine draft pull
-  requests.
+  maintenance automation, episode-deduplicated issues, manifest-driven hosted
+  toolchains, and frozen routine or maintenance draft pull requests.
 - Added stable-publication guards that reject development compilers,
   prerelease Turso inputs, missing tag provenance, dirty trees, and development
   branches.

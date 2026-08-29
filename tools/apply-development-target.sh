@@ -47,11 +47,6 @@ if [[ $upstream == zig ]]; then
     build.zig.zon
     src/version.zig
     tests/consumer/build.zig.zon
-    .github/workflows/ci.yml
-    .github/workflows/drift.yml
-    .github/workflows/extended.yml
-    .github/workflows/release.yml
-    .github/workflows/windows-arm-preview.yml
     .github/ISSUE_TEMPLATE/bug.yml
     README.md
     CHANGELOG.md
