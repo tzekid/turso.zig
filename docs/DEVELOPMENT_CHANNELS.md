@@ -169,7 +169,7 @@ Observed from the official Zig download index on 2026-07-30:
 | Item | Value |
 | --- | --- |
 | Channel | `master` |
-| Version | `0.17.0-dev.1509+bb296ab9b` |
+| Version | `0.17.0-dev.1902+896bd9e15` |
 | Build date | `2026-07-29` |
 | Linux x86_64 archive SHA-256 | `48cc865b8b410ec84eaa97e50c2bd7a657871802ce3aaaf04dd1da2294d4b28a` |
 | Linux ARM64 archive SHA-256 | `7f17e09b675cfe39805c5b551b251151f7750b9df8a168538007890c1c00dc8e` |
@@ -182,7 +182,7 @@ The official index is the discovery source:
 
 ### 6.2 Known Zig migration failures
 
-A discovery run with `0.17.0-dev.1509+bb296ab9b` found:
+A discovery run with `0.17.0-dev.1902+896bd9e15` found:
 
 - the new formatter rejects asymmetric whitespace around `**` in
   `tests/diagnostics.zig`, `tests/security.zig`, and `tests/production.zig`;

@@ -18,7 +18,7 @@ module.
 
 The default build needs:
 
-- Zig `0.17.0-dev.1509+bb296ab9b` (the exact promoted `master` snapshot)
+- Zig `0.17.0-dev.1902+896bd9e15` (the exact promoted `master` snapshot)
 - Rust and Cargo 1.88 or newer
 - a C toolchain
 
