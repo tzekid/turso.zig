@@ -20,6 +20,10 @@ extern fn turso_zig_probe_size_log() usize;
 extern fn turso_zig_probe_align_log() usize;
 extern fn turso_zig_probe_size_config() usize;
 extern fn turso_zig_probe_align_config() usize;
+extern fn turso_zig_probe_size_page_codec_header_info() usize;
+extern fn turso_zig_probe_align_page_codec_header_info() usize;
+extern fn turso_zig_probe_size_page_codec_v1() usize;
+extern fn turso_zig_probe_align_page_codec_v1() usize;
 extern fn turso_zig_probe_size_database_config() usize;
 extern fn turso_zig_probe_align_database_config() usize;
 
@@ -43,12 +47,25 @@ extern fn turso_zig_probe_offset_log_line() usize;
 extern fn turso_zig_probe_offset_log_level() usize;
 extern fn turso_zig_probe_offset_config_logger() usize;
 extern fn turso_zig_probe_offset_config_log_level() usize;
+extern fn turso_zig_probe_offset_page_codec_header_info_page_size() usize;
+extern fn turso_zig_probe_offset_page_codec_header_info_reserved_space() usize;
+extern fn turso_zig_probe_offset_page_codec_header_info_is_supported() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_abi_version() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_ctx() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_reserved_space() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_codec_id() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_destroy() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_probe_header() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_decode_page() usize;
+extern fn turso_zig_probe_offset_page_codec_v1_encode_page() usize;
 extern fn turso_zig_probe_offset_database_config_async_io() usize;
 extern fn turso_zig_probe_offset_database_config_path() usize;
 extern fn turso_zig_probe_offset_database_config_experimental_features() usize;
 extern fn turso_zig_probe_offset_database_config_vfs() usize;
 extern fn turso_zig_probe_offset_database_config_encryption_cipher() usize;
 extern fn turso_zig_probe_offset_database_config_encryption_hexkey() usize;
+extern fn turso_zig_probe_offset_database_config_page_codec() usize;
+extern fn turso_zig_probe_offset_database_config_open_flags() usize;
 extern fn turso_zig_probe_callback_signatures() c_int;
 
 test "all pinned enum constants retain their ABI values" {
@@ -115,6 +132,10 @@ test "all pinned enum constants retain their ABI values" {
         .{ raw.TURSO_TRACING_LEVEL_INFO, 3 },
         .{ raw.TURSO_TRACING_LEVEL_DEBUG, 4 },
         .{ raw.TURSO_TRACING_LEVEL_TRACE, 5 },
+        .{ raw.TURSO_CODEC_LOCATION_DATABASE, 0 },
+        .{ raw.TURSO_CODEC_LOCATION_WAL, 1 },
+        .{ raw.TURSO_DATABASE_OPEN_DEFAULT, 0 },
+        .{ raw.TURSO_DATABASE_OPEN_READONLY, 1 },
     };
     inline for (constants) |pair| {
         try std.testing.expectEqual(@as(c_int, pair[1]), pair[0]);
@@ -172,6 +193,39 @@ test "core public structs retain C layout" {
         line: usize,
         level: raw.turso_tracing_level_t,
     };
+    const PageCodecHeaderInfo = extern struct {
+        page_size: u32,
+        reserved_space: u8,
+        is_supported: u8,
+    };
+    const PageCodecProbeHeader = ?*const fn (
+        ?*anyopaque,
+        [*c]const u8,
+        usize,
+        [*c]PageCodecHeaderInfo,
+        [*c][*c]const u8,
+    ) callconv(.c) i32;
+    const PageCodecTransform = ?*const fn (
+        ?*anyopaque,
+        u32,
+        c_uint,
+        [*c]const u8,
+        usize,
+        [*c]u8,
+        usize,
+        [*c][*c]const u8,
+    ) callconv(.c) i32;
+    const PageCodecDestroy = ?*const fn (?*anyopaque) callconv(.c) void;
+    const PageCodecV1 = extern struct {
+        abi_version: u32,
+        ctx: ?*anyopaque,
+        reserved_space: u8,
+        codec_id: [16]u8,
+        destroy: PageCodecDestroy,
+        probe_header: PageCodecProbeHeader,
+        decode_page: PageCodecTransform,
+        encode_page: PageCodecTransform,
+    };
     const DatabaseConfig = extern struct {
         async_io: u64,
         path: [*c]const u8,
@@ -179,6 +233,8 @@ test "core public structs retain C layout" {
         vfs: [*c]const u8,
         encryption_cipher: [*c]const u8,
         encryption_hexkey: [*c]const u8,
+        page_codec: [*c]const PageCodecV1,
+        open_flags: u32,
     };
 
     try expectLayout(raw.turso_slice_ref_t, SliceRef);
@@ -189,16 +245,23 @@ test "core public structs retain C layout" {
     try expectLayout(raw.turso_value_t, ExtensionValue);
     try expectLayout(raw.turso_agg_ctx_t, AggregateContext);
     try expectLayout(raw.turso_log_t, Log);
+    try expectLayout(raw.turso_page_codec_header_info_t, PageCodecHeaderInfo);
+    try expectLayout(raw.turso_page_codec_v1_t, PageCodecV1);
     try std.testing.expectEqual(@offsetOf(ExtensionText, "text"), @offsetOf(raw.turso_extension_text_t, "text"));
     try std.testing.expectEqual(@offsetOf(ExtensionText, "len"), @offsetOf(raw.turso_extension_text_t, "len"));
     try std.testing.expectEqual(@offsetOf(ExtensionError, "message"), @offsetOf(raw.turso_extension_error_t, "message"));
     try std.testing.expectEqual(@offsetOf(ExtensionValue, "value"), @offsetOf(raw.turso_value_t, "value"));
     try std.testing.expectEqual(@offsetOf(Log, "timestamp"), @offsetOf(raw.turso_log_t, "timestamp"));
     try std.testing.expectEqual(@offsetOf(Log, "level"), @offsetOf(raw.turso_log_t, "level"));
+    try std.testing.expectEqual(@offsetOf(PageCodecV1, "ctx"), @offsetOf(raw.turso_page_codec_v1_t, "ctx"));
+    try std.testing.expectEqual(@offsetOf(PageCodecV1, "codec_id"), @offsetOf(raw.turso_page_codec_v1_t, "codec_id"));
+    try std.testing.expectEqual(@offsetOf(PageCodecV1, "encode_page"), @offsetOf(raw.turso_page_codec_v1_t, "encode_page"));
     try std.testing.expectEqual(@sizeOf(DatabaseConfig), @sizeOf(raw.turso_database_config_t));
     try std.testing.expectEqual(@alignOf(DatabaseConfig), @alignOf(raw.turso_database_config_t));
     try std.testing.expectEqual(@offsetOf(DatabaseConfig, "async_io"), @offsetOf(raw.turso_database_config_t, "async_io"));
     try std.testing.expectEqual(@offsetOf(DatabaseConfig, "encryption_hexkey"), @offsetOf(raw.turso_database_config_t, "encryption_hexkey"));
+    try std.testing.expectEqual(@offsetOf(DatabaseConfig, "page_codec"), @offsetOf(raw.turso_database_config_t, "page_codec"));
+    try std.testing.expectEqual(@offsetOf(DatabaseConfig, "open_flags"), @offsetOf(raw.turso_database_config_t, "open_flags"));
 }
 
 test "independent C probe agrees with every public base struct layout" {
@@ -211,6 +274,8 @@ test "independent C probe agrees with every public base struct layout" {
     try expectProbe(raw.turso_agg_ctx_t, turso_zig_probe_size_agg_ctx, turso_zig_probe_align_agg_ctx);
     try expectProbe(raw.turso_log_t, turso_zig_probe_size_log, turso_zig_probe_align_log);
     try expectProbe(raw.turso_config_t, turso_zig_probe_size_config, turso_zig_probe_align_config);
+    try expectProbe(raw.turso_page_codec_header_info_t, turso_zig_probe_size_page_codec_header_info, turso_zig_probe_align_page_codec_header_info);
+    try expectProbe(raw.turso_page_codec_v1_t, turso_zig_probe_size_page_codec_v1, turso_zig_probe_align_page_codec_v1);
     try expectProbe(raw.turso_database_config_t, turso_zig_probe_size_database_config, turso_zig_probe_align_database_config);
 
     try expectOffset(raw.turso_slice_ref_t, "ptr", turso_zig_probe_offset_slice_ref_ptr);
@@ -233,12 +298,25 @@ test "independent C probe agrees with every public base struct layout" {
     try expectOffset(raw.turso_log_t, "level", turso_zig_probe_offset_log_level);
     try expectOffset(raw.turso_config_t, "logger", turso_zig_probe_offset_config_logger);
     try expectOffset(raw.turso_config_t, "log_level", turso_zig_probe_offset_config_log_level);
+    try expectOffset(raw.turso_page_codec_header_info_t, "page_size", turso_zig_probe_offset_page_codec_header_info_page_size);
+    try expectOffset(raw.turso_page_codec_header_info_t, "reserved_space", turso_zig_probe_offset_page_codec_header_info_reserved_space);
+    try expectOffset(raw.turso_page_codec_header_info_t, "is_supported", turso_zig_probe_offset_page_codec_header_info_is_supported);
+    try expectOffset(raw.turso_page_codec_v1_t, "abi_version", turso_zig_probe_offset_page_codec_v1_abi_version);
+    try expectOffset(raw.turso_page_codec_v1_t, "ctx", turso_zig_probe_offset_page_codec_v1_ctx);
+    try expectOffset(raw.turso_page_codec_v1_t, "reserved_space", turso_zig_probe_offset_page_codec_v1_reserved_space);
+    try expectOffset(raw.turso_page_codec_v1_t, "codec_id", turso_zig_probe_offset_page_codec_v1_codec_id);
+    try expectOffset(raw.turso_page_codec_v1_t, "destroy", turso_zig_probe_offset_page_codec_v1_destroy);
+    try expectOffset(raw.turso_page_codec_v1_t, "probe_header", turso_zig_probe_offset_page_codec_v1_probe_header);
+    try expectOffset(raw.turso_page_codec_v1_t, "decode_page", turso_zig_probe_offset_page_codec_v1_decode_page);
+    try expectOffset(raw.turso_page_codec_v1_t, "encode_page", turso_zig_probe_offset_page_codec_v1_encode_page);
     try expectOffset(raw.turso_database_config_t, "async_io", turso_zig_probe_offset_database_config_async_io);
     try expectOffset(raw.turso_database_config_t, "path", turso_zig_probe_offset_database_config_path);
     try expectOffset(raw.turso_database_config_t, "experimental_features", turso_zig_probe_offset_database_config_experimental_features);
     try expectOffset(raw.turso_database_config_t, "vfs", turso_zig_probe_offset_database_config_vfs);
     try expectOffset(raw.turso_database_config_t, "encryption_cipher", turso_zig_probe_offset_database_config_encryption_cipher);
     try expectOffset(raw.turso_database_config_t, "encryption_hexkey", turso_zig_probe_offset_database_config_encryption_hexkey);
+    try expectOffset(raw.turso_database_config_t, "page_codec", turso_zig_probe_offset_database_config_page_codec);
+    try expectOffset(raw.turso_database_config_t, "open_flags", turso_zig_probe_offset_database_config_open_flags);
     try std.testing.expectEqual(@as(c_int, 1), turso_zig_probe_callback_signatures());
 }
 
@@ -251,6 +329,9 @@ test "all base SDK entry points retain function arity and C calling convention" 
         assertCFunctionPointer(raw.turso_aggregate_step_function_t, 4);
         assertCFunctionPointer(raw.turso_aggregate_final_function_t, 2);
         assertCFunctionPointer(raw.turso_collation_function_t, 5);
+        assertCFunctionPointer(raw.turso_page_codec_probe_header_t, 5);
+        assertCFunctionPointer(raw.turso_page_codec_transform_t, 8);
+        assertCFunctionPointer(raw.turso_page_codec_destroy_t, 1);
         assertCFunction(raw.turso_version, 0);
         assertCFunction(raw.turso_setup, 2);
         assertCFunction(raw.turso_database_new, 3);
@@ -311,6 +392,8 @@ test "raw ABI executes SELECT 1" {
         .vfs = null,
         .encryption_cipher = null,
         .encryption_hexkey = null,
+        .page_codec = null,
+        .open_flags = raw.TURSO_DATABASE_OPEN_DEFAULT,
     };
 
     var database: ?*const raw.turso_database_t = null;

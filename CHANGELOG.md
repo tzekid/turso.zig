@@ -39,9 +39,13 @@ is pre-1.0.
 - Replaced removed Zig C imports with build-owned translated C modules and
   adapted build paths, type reflection, allocator calls, enum names, and test
   syntax for Zig 0.17 development.
-- Audited Turso's internal async-open/VFS refactor and sync protocol
-  auto-detection. Public base declarations and symbols are unchanged; the sync
-  header change is comment-only.
+- Audited Turso's external page-codec callbacks, read-only open flag,
+  statement-parameter metadata, blocking sleep steps, target-specific tracing
+  dependency, and sync Windows-I/O fix. Exported function symbols remain
+  unchanged, while the base configuration ABI now includes the new raw fields.
+- Kept external page codecs and read-only opening at the raw C boundary pending
+  a deliberate safe-API design; ordinary safe opens explicitly select no codec
+  and the default read-write mode.
 - Made prepared SELECT statements reusable through `Statement.query` and
   `queryParams`, with heap-stable Rows leases and multiple idle statements per
   Connection while preserving one active execution.

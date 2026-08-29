@@ -67,9 +67,9 @@ pub const Statement = struct {
         return std.math.cast(usize, count) orelse error.IntegerOverflow;
     }
 
-    /// Copy one parameter's native SQL name. Positions are one-based. The
-    /// pinned engine canonicalizes anonymous `?` slots to `?NNN`; a null result
-    /// is reserved for a native slot without a name. The caller owns the bytes.
+    /// Copy one parameter's native SQL name. Positions are one-based. Anonymous
+    /// `?` slots have no name and return null; `?NNN` and named placeholders
+    /// retain their SQL prefix. The caller owns the returned bytes.
     pub fn parameterName(
         self: *const Statement,
         allocator: std.mem.Allocator,

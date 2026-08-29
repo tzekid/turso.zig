@@ -11,6 +11,8 @@ test "raw and safe layers agree on statuses and all SQL value kinds" {
         .vfs = null,
         .encryption_cipher = null,
         .encryption_hexkey = null,
+        .page_codec = null,
+        .open_flags = raw.TURSO_DATABASE_OPEN_DEFAULT,
     };
     var raw_database: ?*const raw.turso_database_t = null;
     try expectRaw(raw.TURSO_OK, raw.turso_database_new(&raw_config, &raw_database, &raw_error), &raw_error);

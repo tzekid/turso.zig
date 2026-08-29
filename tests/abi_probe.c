@@ -81,6 +81,8 @@ PROBE_LAYOUT(value, turso_value_t)
 PROBE_LAYOUT(agg_ctx, turso_agg_ctx_t)
 PROBE_LAYOUT(log, turso_log_t)
 PROBE_LAYOUT(config, turso_config_t)
+PROBE_LAYOUT(page_codec_header_info, turso_page_codec_header_info_t)
+PROBE_LAYOUT(page_codec_v1, turso_page_codec_v1_t)
 PROBE_LAYOUT(database_config, turso_database_config_t)
 
 PROBE_OFFSET(slice_ref, turso_slice_ref_t, ptr)
@@ -103,12 +105,25 @@ PROBE_OFFSET(log, turso_log_t, line)
 PROBE_OFFSET(log, turso_log_t, level)
 PROBE_OFFSET(config, turso_config_t, logger)
 PROBE_OFFSET(config, turso_config_t, log_level)
+PROBE_OFFSET(page_codec_header_info, turso_page_codec_header_info_t, page_size)
+PROBE_OFFSET(page_codec_header_info, turso_page_codec_header_info_t, reserved_space)
+PROBE_OFFSET(page_codec_header_info, turso_page_codec_header_info_t, is_supported)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, abi_version)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, ctx)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, reserved_space)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, codec_id)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, destroy)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, probe_header)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, decode_page)
+PROBE_OFFSET(page_codec_v1, turso_page_codec_v1_t, encode_page)
 PROBE_OFFSET(database_config, turso_database_config_t, async_io)
 PROBE_OFFSET(database_config, turso_database_config_t, path)
 PROBE_OFFSET(database_config, turso_database_config_t, experimental_features)
 PROBE_OFFSET(database_config, turso_database_config_t, vfs)
 PROBE_OFFSET(database_config, turso_database_config_t, encryption_cipher)
 PROBE_OFFSET(database_config, turso_database_config_t, encryption_hexkey)
+PROBE_OFFSET(database_config, turso_database_config_t, page_codec)
+PROBE_OFFSET(database_config, turso_database_config_t, open_flags)
 
 /*
  * These assignments force an independent C compiler to validate the callback
@@ -167,6 +182,41 @@ static int32_t collation(
     (void)right_len;
     return 0;
 }
+static int32_t page_codec_probe_header(
+    void *context,
+    const uint8_t *raw_page1_prefix,
+    size_t raw_len,
+    turso_page_codec_header_info_t *out,
+    const char **error)
+{
+    (void)context;
+    (void)raw_page1_prefix;
+    (void)raw_len;
+    (void)out;
+    (void)error;
+    return 0;
+}
+static int32_t page_codec_transform(
+    void *context,
+    uint32_t page_no,
+    turso_codec_location_t location,
+    const uint8_t *input,
+    size_t input_len,
+    uint8_t *output,
+    size_t output_len,
+    const char **error)
+{
+    (void)context;
+    (void)page_no;
+    (void)location;
+    (void)input;
+    (void)input_len;
+    (void)output;
+    (void)output_len;
+    (void)error;
+    return 0;
+}
+static void page_codec_destroy(void *context) { (void)context; }
 
 static turso_context_destructor_t checked_context_destructor = context_destructor;
 static turso_value_destructor_t checked_value_destructor = value_destructor;
@@ -175,6 +225,9 @@ static turso_aggregate_init_function_t checked_aggregate_init = aggregate_init;
 static turso_aggregate_step_function_t checked_aggregate_step = aggregate_step;
 static turso_aggregate_final_function_t checked_aggregate_final = aggregate_final;
 static turso_collation_function_t checked_collation = collation;
+static turso_page_codec_probe_header_t checked_page_codec_probe_header = page_codec_probe_header;
+static turso_page_codec_transform_t checked_page_codec_transform = page_codec_transform;
+static turso_page_codec_destroy_t checked_page_codec_destroy = page_codec_destroy;
 
 int turso_zig_probe_callback_signatures(void)
 {
@@ -184,5 +237,8 @@ int turso_zig_probe_callback_signatures(void)
            checked_aggregate_init != NULL &&
            checked_aggregate_step != NULL &&
            checked_aggregate_final != NULL &&
-           checked_collation != NULL;
+           checked_collation != NULL &&
+           checked_page_codec_probe_header != NULL &&
+           checked_page_codec_transform != NULL &&
+           checked_page_codec_destroy != NULL;
 }

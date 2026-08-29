@@ -35,6 +35,54 @@ path.write_text(content.replace(old, new))
 PY
 }
 
+replace_first_literal() {
+  local path=$1
+  local old=$2
+  local new=$3
+  OLD_VALUE=$old NEW_VALUE=$new python3 - "$repo_root/$path" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+old = os.environ["OLD_VALUE"]
+new = os.environ["NEW_VALUE"]
+content = path.read_text()
+if old not in content:
+    raise SystemExit(f"{path}: expected value not found: {old}")
+path.write_text(content.replace(old, new, 1))
+PY
+}
+
+replace_section_literal() {
+  local path=$1
+  local heading=$2
+  local old=$3
+  local new=$4
+  SECTION_HEADING=$heading OLD_VALUE=$old NEW_VALUE=$new \
+    python3 - "$repo_root/$path" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+heading = os.environ["SECTION_HEADING"]
+old = os.environ["OLD_VALUE"]
+new = os.environ["NEW_VALUE"]
+content = path.read_text()
+start = content.find(heading)
+if start == -1:
+    raise SystemExit(f"{path}: section heading not found: {heading}")
+end = content.find("\n## ", start + len(heading))
+if end == -1:
+    end = len(content)
+section = content[start:end]
+if old not in section:
+    raise SystemExit(f"{path}: expected section value not found: {old}")
+path.write_text(content[:start] + section.replace(old, new) + content[end:])
+PY
+}
+
 scratch=$(mktemp -d)
 trap 'rm -r "$scratch"' EXIT
 
@@ -59,6 +107,7 @@ if [[ $upstream == zig ]]; then
 else
   old_version=$(jq -er '.turso.declared_version' "$promoted")
   old_commit=$(jq -er '.turso.commit' "$promoted")
+  old_timestamp=$(jq -er '.turso.commit_timestamp' "$promoted")
   old_epoch=$(jq -er '.turso.source_date_epoch' "$promoted")
   old_archive=$(jq -er '.turso.archive_url' "$promoted")
   old_package_hash=$(jq -er '.turso.zig_package_hash' "$promoted")
@@ -67,6 +116,7 @@ else
 
   new_version=$(jq -er '.turso.declared_version' "$candidate")
   new_commit=$(jq -er '.turso.commit' "$candidate")
+  new_timestamp=$(jq -er '.turso.commit_timestamp' "$candidate")
   new_epoch=$(jq -er '.turso.source_date_epoch' "$candidate")
   new_archive=$(jq -er '.turso.archive_url' "$candidate")
   new_package_hash=$(jq -er '.turso.zig_package_hash' "$candidate")
@@ -88,18 +138,24 @@ else
   replace_literal NOTICE "$old_sync_hash" "$new_sync_hash"
   replace_literal README.md "$old_version" "$new_version"
   replace_literal README.md "$old_commit" "$new_commit"
-  for path in CHANGELOG.md docs/DEVELOPMENT_CHANNELS.md docs/RELEASING.md docs/UPSTREAM_ABI.md; do
-    replace_literal "$path" "$old_version" "$new_version"
-    replace_literal "$path" "$old_commit" "$new_commit"
+  for path in CHANGELOG.md docs/RELEASING.md docs/UPSTREAM_ABI.md; do
+    replace_first_literal "$path" "$old_version" "$new_version"
+    replace_first_literal "$path" "$old_commit" "$new_commit"
   done
   replace_literal docs/RELEASING.md "$old_package_hash" "$new_package_hash"
   replace_literal docs/RELEASING.md "$old_base_hash" "$new_base_hash"
   replace_literal docs/RELEASING.md "$old_sync_hash" "$new_sync_hash"
   replace_literal docs/RELEASING.md "$old_epoch" "$new_epoch"
-  replace_literal docs/DEVELOPMENT_CHANNELS.md "$old_package_hash" "$new_package_hash"
-  replace_literal docs/DEVELOPMENT_CHANNELS.md "$old_base_hash" "$new_base_hash"
-  replace_literal docs/DEVELOPMENT_CHANNELS.md "$old_sync_hash" "$new_sync_hash"
-  replace_literal docs/DEVELOPMENT_CHANNELS.md "$old_epoch" "$new_epoch"
+  development_section='### 6.3 Turso candidate'
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_timestamp" "$new_timestamp"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "${old_timestamp%%T*}" "${new_timestamp%%T*}"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_archive" "$new_archive"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_version" "$new_version"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_commit" "$new_commit"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_epoch" "$new_epoch"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_package_hash" "$new_package_hash"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_base_hash" "$new_base_hash"
+  replace_section_literal docs/DEVELOPMENT_CHANNELS.md "$development_section" "$old_sync_hash" "$new_sync_hash"
 
   for path in \
     tests/fixtures/partial_database.c \
