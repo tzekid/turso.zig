@@ -11,10 +11,10 @@ include/turso.h is copied from:
   Project: Turso Database
   Source: https://github.com/tursodatabase/turso
   Development channel: main
-  Declared version: 0.8.0-pre.2
-  Commit: 6e527a75595576790566f3d36560fbe95c5d87a2
+  Declared version: 0.8.0-pre.7
+  Commit: dadff8df162f3c39b6189ef288cb3475666db3b2
   Path: sdk-kit/turso.h
-  Upstream body SHA-256: 14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb
+  Upstream body SHA-256: 4e68f1979e239c675cfb39975e2f5120f481d6fb91f3777fd06b80a7872280a6
   License: MIT
   Copyright 2024 the Turso authors
 

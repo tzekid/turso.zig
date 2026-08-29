@@ -142,7 +142,7 @@ At the start of this specification, `master` has:
 | Turso tag object | `31cdceeb07d3b294e5b2f13b03cfdbbf59769b78` |
 | Turso source commit | `4a88feb7caef869c16f6215b6dc51eafd5b3e54e` |
 | Turso package hash | `N-V-__8AABYTqgLLoRwhKj-QpEwCZuEqg0n62mHiVJuZRQcd` |
-| Base header SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
+| Base header SHA-256 | `4e68f1979e239c675cfb39975e2f5120f481d6fb91f3777fd06b80a7872280a6` |
 | Sync header SHA-256 | `38b9dc73fc2fe45c3d86d69ff2ad48b8c99d693a4462514ea50fb876aba6ee35` |
 | Source epoch | `1784727869` |
 
@@ -210,13 +210,13 @@ Observed on 2026-07-30:
 | Item | Value |
 | --- | --- |
 | Channel | `main` |
-| Commit | `6e527a75595576790566f3d36560fbe95c5d87a2` |
+| Commit | `dadff8df162f3c39b6189ef288cb3475666db3b2` |
 | Commit timestamp | `2026-07-30T13:47:25Z` |
-| Source epoch | `1785419245` |
-| Declared workspace version | `0.8.0-pre.2` |
-| Archive URL | `https://github.com/tursodatabase/turso/archive/6e527a75595576790566f3d36560fbe95c5d87a2.tar.gz` |
-| Zig package hash | `N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr` |
-| Base header SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
+| Source epoch | `1787997620` |
+| Declared workspace version | `0.8.0-pre.7` |
+| Archive URL | `https://github.com/tursodatabase/turso/archive/dadff8df162f3c39b6189ef288cb3475666db3b2.tar.gz` |
+| Zig package hash | `N-V-__8AAJyRdgT3y344i_c1UhuZh_j-vvpOfC7sB-Nj3y5u` |
+| Base header SHA-256 | `4e68f1979e239c675cfb39975e2f5120f481d6fb91f3777fd06b80a7872280a6` |
 | Sync header SHA-256 | `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1` |
 | Rust toolchain | `1.88` |
 

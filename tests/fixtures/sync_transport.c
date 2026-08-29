@@ -71,7 +71,7 @@ static const char *owned_message(const char *message)
 
 const char *turso_version(void)
 {
-    return "0.8.0-pre.2";
+    return "0.8.0-pre.7";
 }
 
 void sync_transport_fixture_reset(void)
