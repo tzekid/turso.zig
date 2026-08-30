@@ -2,7 +2,7 @@
     .name = .turso_consumer_smoke,
     .version = "0.0.0",
     .fingerprint = 0xd066d84e3407e3c,
-    .minimum_zig_version = "0.17.0-dev.1902+896bd9e15",
+    .minimum_zig_version = "0.17.0-dev.1933+e19a73c2d",
     .dependencies = .{
         .turso = .{ .path = "../.." },
     },

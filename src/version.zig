@@ -1,7 +1,7 @@
 //! Versions and immutable upstream provenance for this binding release.
 
 pub const binding = "0.1.1";
-pub const minimum_zig = "0.17.0-dev.1902+896bd9e15";
+pub const minimum_zig = "0.17.0-dev.1933+e19a73c2d";
 
 pub const upstream = "0.8.0-pre.2";
 pub const upstream_channel = "main";

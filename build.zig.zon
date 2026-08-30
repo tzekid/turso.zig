@@ -2,7 +2,7 @@
     .name = .turso,
     .version = "0.1.1",
     .fingerprint = 0x18fb0b7e7b06fd7d, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.17.0-dev.1902+896bd9e15",
+    .minimum_zig_version = "0.17.0-dev.1933+e19a73c2d",
     .dependencies = .{
         .turso_native = .{
             .url = "https://github.com/tursodatabase/turso/archive/6e527a75595576790566f3d36560fbe95c5d87a2.tar.gz",

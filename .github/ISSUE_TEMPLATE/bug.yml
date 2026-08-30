@@ -34,7 +34,7 @@ body:
     id: zig
     attributes:
       label: Zig version
-      placeholder: 0.17.0-dev.1902+896bd9e15
+      placeholder: 0.17.0-dev.1933+e19a73c2d
     validations:
       required: true
   - type: dropdown
