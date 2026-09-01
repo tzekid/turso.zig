@@ -264,9 +264,7 @@ test "every SQL parameter spelling preserves one-based and sparse indexing" {
     var sparse = try connection.prepare("SELECT ?, ?5", .{});
     defer sparse.deinit();
     try std.testing.expectEqual(@as(usize, 5), try sparse.parameterCount());
-    const first_name = (try sparse.parameterName(std.testing.allocator, 1)).?;
-    defer std.testing.allocator.free(first_name);
-    try std.testing.expectEqualStrings("?1", first_name);
+    try std.testing.expect((try sparse.parameterName(std.testing.allocator, 1)) == null);
     const fifth_name = (try sparse.parameterName(std.testing.allocator, 5)).?;
     defer std.testing.allocator.free(fifth_name);
     try std.testing.expectEqualStrings("?5", fifth_name);

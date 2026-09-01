@@ -205,35 +205,35 @@ unpacked footprint or first-run latency.
 
 ### 6.3 Turso candidate
 
-Observed on 2026-07-30:
+Observed on 2026-08-29:
 
 | Item | Value |
 | --- | --- |
 | Channel | `main` |
-| Commit | `6e527a75595576790566f3d36560fbe95c5d87a2` |
-| Commit timestamp | `2026-07-30T13:47:25Z` |
-| Source epoch | `1785419245` |
-| Declared workspace version | `0.8.0-pre.2` |
-| Archive URL | `https://github.com/tursodatabase/turso/archive/6e527a75595576790566f3d36560fbe95c5d87a2.tar.gz` |
-| Zig package hash | `N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr` |
-| Base header SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
+| Commit | `dadff8df162f3c39b6189ef288cb3475666db3b2` |
+| Commit timestamp | `2026-08-29T10:00:20Z` |
+| Source epoch | `1787997620` |
+| Declared workspace version | `0.8.0-pre.7` |
+| Archive URL | `https://github.com/tursodatabase/turso/archive/dadff8df162f3c39b6189ef288cb3475666db3b2.tar.gz` |
+| Zig package hash | `N-V-__8AAJyRdgT3y344i_c1UhuZh_j-vvpOfC7sB-Nj3y5u` |
+| Base header SHA-256 | `4e68f1979e239c675cfb39975e2f5120f481d6fb91f3777fd06b80a7872280a6` |
 | Sync header SHA-256 | `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1` |
 | Rust toolchain | `1.88` |
 
-The base header is byte-for-byte unchanged from `v0.7.1`. The sync header
-changes only the comment describing `logical_mvcc_pull`: `false` now
-auto-detects the remote protocol, while `true` is an escape hatch that forces
-MVCC logical-log pulls. No C declaration changed in that observed diff.
+The base header adds an external page-codec ABI and a read-only database-open
+flag. `turso_database_config_t` therefore grows from 48 to 64 bytes on the
+audited x86_64 ABI. The sync header is unchanged from the preceding promoted
+development pin, and exported base and sync function symbols are unchanged.
 
 The package hash was computed and verified with the promoted Zig development
 compiler.
 
-The unchanged declarations do not make this a provenance-only update. Relevant
-Rust implementation and workspace changes since `v0.7.1` include async-open
-refactors, reset behavior, managed extension APIs, custom column metadata,
-feature handling, sync protocol selection, MVCC behavior, and dependency-lock
-changes. They require the full behavioral and ownership review in this
-specification.
+Relevant implementation changes since the preceding promoted commit include
+page-codec callback ownership, validation, and error handling; read-only open
+flags; statement sleep-step handling; anonymous parameter-name behavior;
+target-specific tracing dependencies; and a Windows sync-I/O overflow fix.
+The safe wrapper explicitly selects no page codec and default read-write open
+flags. Exposing either new capability safely remains a separate API design.
 
 ## 7. Machine-readable target manifest
 

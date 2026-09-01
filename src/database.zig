@@ -130,6 +130,8 @@ pub const Database = struct {
             .vfs = if (vfs_string) |value| value.ptr else null,
             .encryption_cipher = if (cipher_string) |value| value.ptr else null,
             .encryption_hexkey = if (key_string) |value| value.ptr else null,
+            .page_codec = null,
+            .open_flags = raw.TURSO_DATABASE_OPEN_DEFAULT,
         };
 
         var handle: ?*const raw.turso_database_t = null;

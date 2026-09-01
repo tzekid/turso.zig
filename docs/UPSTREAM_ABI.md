@@ -8,14 +8,16 @@ The detailed stable baseline below is pinned to final annotated tag `v0.7.1` (ta
 release commit.
 
 `master` currently promotes development channel `main` at commit
-`6e527a75595576790566f3d36560fbe95c5d87a2`, declared version
-`0.8.0-pre.2`. The base header body remains byte-identical to the stable
-baseline. The sync header changes comments only; its promoted body digest is
+`dadff8df162f3c39b6189ef288cb3475666db3b2`, declared version
+`0.8.0-pre.7`. The base header adds external page-codec declarations and a
+database-open flag, while the sync header is unchanged from the preceding
+development pin. Their promoted body digests are
+`4e68f1979e239c675cfb39975e2f5120f481d6fb91f3777fd06b80a7872280a6` and
 `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1`.
 The development delta audit is recorded below. Re-audit it on every promoted
 commit.
 
-The audited upstream header body digests are:
+The stable `v0.7.1` header body digests remain:
 
 - `sdk-kit/turso.h`:
   `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb`
@@ -26,29 +28,48 @@ Moving upstream refs are discovery inputs only. Required builds use the exact
 promoted commit. Stable release authority still requires an annotated tag and
 cannot use the development commit.
 
-## Development delta: v0.7.1 to main 6e527a75
+## Development delta: promoted 6e527a75 to main dadff8df
 
-The reviewed relevant diff changes six files: the workspace manifest and
-lockfile, `sdk-kit/src/lib.rs`, `sdk-kit/src/rsapi.rs`,
-`sync/sdk-kit/src/rsapi.rs`, and sync-header comments. `LICENSE.md`,
-`NOTICE.md`, the base C header, C function declarations, exported symbol
-allowlists, crate feature names, native library names, and Rust `1.88`
-toolchain requirement are unchanged.
+The reviewed SDK Kit delta changes the base header, generated Rust bindings,
+base implementation, SDK manifests, workspace manifest and lockfile, and a
+small sync-I/O implementation path. `LICENSE.md`, `NOTICE.md`, the sync header,
+exported function symbols, native library names, public crate feature names,
+and Rust `1.88` toolchain requirement are unchanged.
 
-The base SDK refactors internal VFS selection to a typed `IoBackend` and routes
-database opening through the new core open API. The C strings and behavior
-exposed to this binding remain the same; target validation and the blocking
-`async_io = false` policy are retained. Workspace dependency and lockfile
-changes alter the native implementation and therefore require the full native
-matrix, but do not add native link requirements observed by the ABI gate.
+The base C header adds codec location and database-open enums,
+`turso_page_codec_header_info_t`, three callback types, and
+`turso_page_codec_v1_t`. It appends `page_codec` and `open_flags` to
+`turso_database_config_t`, growing that structure from 48 to 64 bytes on the
+audited x86_64 ABI. No function was added or removed. The raw Zig layer exposes
+the translated declarations, constants, layouts, and signatures. The safe
+wrapper passes a null codec and `TURSO_DATABASE_OPEN_DEFAULT`; page codecs and
+read-only opening are not promoted into the safe API by this compatibility
+update.
 
-Sync now interprets C `logical_mvcc_pull = false` as protocol auto-detection
-and persistence, while `true` remains an explicit MVCC override. Fresh MVCC
-bootstrap also catches up through the durable logical-log tail before
-connection. This is a behavior change, not an ABI layout change. The wrapper's
-default `false` now gains auto-detection; its explicit opt-in remains a force
-override. Ownership, transfer, destructor, callback, and error-allocation
-declarations are unchanged.
+The SDK copies the page-codec structure during database construction and holds
+it through shared database state. The codec context and callbacks must remain
+valid and thread-safe until the copied codec is finally dropped, at which point
+the optional destroy callback runs once. ABI version `1`, non-zero `codec_id`,
+and decode/encode callbacks are required; header probing is optional. Built-in
+encryption and an external codec are mutually exclusive. Callback input and
+output buffers are borrowed for the call. On a non-zero callback status, the
+implementation copies the pointed-to error text during the call and does not
+free it, so its storage remains callback-owned.
+
+`open_flags` rejects every unknown bit and currently maps only
+`TURSO_DATABASE_OPEN_READONLY`. Statement stepping now maps the internal
+`Sleep` result through the existing blocking/`IO` policy, so no new C status is
+introduced. Parameter-name metadata follows the header's clarified contract:
+anonymous `?` slots return null, while `?NNN` and named slots retain their SQL
+prefix. The safe method already returns an optional owned copy; its tests no
+longer assume an invented name for anonymous slots.
+
+The SDK manifests move the rolling-file appender behind a non-WASM target
+condition. Linux static-link evidence remains
+`-ldl -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`; target-native CI remains
+authoritative for the other supported platforms. Sync also fixes a Windows-I/O
+integer overflow without changing its public C declarations or ownership
+contract.
 
 The promoted commit passed translated-declaration comparison, base exported
 symbols and C probes, runtime-version match/mismatch, native safe suites, and
@@ -136,6 +157,9 @@ layout independently.
   Turso allocation. Copy it if needed, then call `turso_str_deinit` exactly once.
   `turso_version()` is the exception: it returns static storage and must never be
   freed ([`turso.h:173-175`](https://github.com/tursodatabase/turso/blob/4a88feb7caef869c16f6215b6dc51eafd5b3e54e/sdk-kit/turso.h#L173-L175)).
+- Page-codec callback errors are different: the implementation copies their
+  text before the callback returns and never frees the pointer. That storage
+  remains callback-owned and only needs to stay valid for the callback.
 
 ### Status and native messages
 
@@ -219,6 +243,12 @@ are silently ignored (`sdk-kit/src/rsapi.rs:184-213`). The wrapper therefore
 exposes every pinned parser token as a typed field and confines unknown names
 to the validated, explicitly unsupported `unchecked_extra` escape hatch.
 
+The promoted raw ABI also accepts a version-1 external page codec and a
+read-only open bit. Built-in encryption and an external codec cannot be
+combined. The safe wrapper deliberately supplies neither new capability: it
+passes a null codec and the default read-write flag until their public API,
+ownership, and platform test contracts are designed separately.
+
 ### Connection close
 
 `turso_connection_close` requires no ongoing operations
@@ -234,7 +264,9 @@ rather than interpreting these defaults as native state (`sdk-kit/src/capi.rs:11
 
 ### Statement execution, bindings, rows, and metadata
 
-- Bind positions and parameter-name lookup are 1-based. Named lookup requires the
+- Bind positions and parameter-name lookup are 1-based. Anonymous `?` slots
+  return no parameter name; explicit `?NNN` and named slots retain their SQL
+  prefix. Named lookup requires the
   SQL prefix (`:`, `@`, `$`, or `?N`); it returns `-1` on any failure. The safe
   wrapper may implement named bind as lookup followed by positional bind.
 - TEXT and BLOB bind calls copy input immediately. TEXT is UTF-8 validated and may
@@ -422,6 +454,7 @@ Priority is impact on a production Zig interface.
 | P1 | C positional binds return status only, losing their native message. Sentinel getters also collapse invalid state and valid zero/null values. | Prevalidate in Zig and preserve a precise wrapper error; do not invent a native message. |
 | P1 | Rust API exposes connection interrupt/query-timeout methods, but `turso.h` does not (`sdk-kit/src/rsapi.rs:931-950`). | Omit from safe Zig API or propose upstream C additions; do not bind Rust symbols. |
 | P1 | No explicit C ABI revision exists; only crate version is exported. | Require exact `turso_version()` match by default and compare header/symbol manifests on upgrade. |
+| P1 | The external page-codec header does not spell out callback error-string ownership or buffer lifetimes; the implementation currently borrows all buffers and copies but does not free error text during the call. | Keep page codecs raw-only, record the implementation-derived contract, and require an explicit safe API and callback-lifetime review before exposing them. |
 | P2 | `turso_setup` is process-global/one-shot but its header only says “Setup global database info.” | Make setup idempotent in Zig and document that later filter changes do not take effect. |
 | P2 | Unknown experimental feature strings are silently ignored. | Expose every pinned token as a typed flag; keep unknown values only behind validated `unchecked_extra` and make the absence of an upstream effect explicit. |
 | P2 | Sync has no auth-token configuration field; transport owns authorization. | Authorization is an explicit caller-owned transport option; the standard driver and tests keep it out of diagnostics. |
