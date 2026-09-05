@@ -160,109 +160,41 @@ pub fn build(b: *std.Build) void {
     });
     docs_step.dependOn(&install_sync_docs.step);
 
-    const basic_example = b.addExecutable(.{
-        .name = "turso-basic",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/basic.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_basic_example = b.addRunArtifact(basic_example);
-    const basic_example_step = b.step("example-basic", "Build and run the basic in-memory CRUD example");
-    basic_example_step.dependOn(&run_basic_example.step);
-
-    const file_example = b.addExecutable(.{
-        .name = "turso-file",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/file.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_file_example = b.addRunArtifact(file_example);
-    const file_example_step = b.step("example-file", "Build and run the persistent file database example");
-    file_example_step.dependOn(&run_file_example.step);
-
-    const values_example = b.addExecutable(.{
-        .name = "turso-values",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/values.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_values_example = b.addRunArtifact(values_example);
-    const values_example_step = b.step("example-values", "Build and run the SQL value and owned-copy example");
-    values_example_step.dependOn(&run_values_example.step);
-
-    const diagnostics_example = b.addExecutable(.{
-        .name = "turso-diagnostics",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/diagnostics.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_diagnostics_example = b.addRunArtifact(diagnostics_example);
-    const diagnostics_example_step = b.step("example-diagnostics", "Build and run the diagnostics and metadata example");
-    diagnostics_example_step.dependOn(&run_diagnostics_example.step);
-
-    const prepared_example = b.addExecutable(.{
-        .name = "turso-prepared",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/prepared.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_prepared_example = b.addRunArtifact(prepared_example);
-    const prepared_example_step = b.step("example-prepared", "Build and run the prepared statement reuse example");
-    prepared_example_step.dependOn(&run_prepared_example.step);
-
-    const batch_example = b.addExecutable(.{
-        .name = "turso-batch",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/batch.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_batch_example = b.addRunArtifact(batch_example);
-    const batch_example_step = b.step("example-batch", "Build and run the structured batch example");
-    batch_example_step.dependOn(&run_batch_example.step);
-
-    const transaction_example = b.addExecutable(.{
-        .name = "turso-transaction",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/transaction.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_transaction_example = b.addRunArtifact(transaction_example);
-    const transaction_example_step = b.step("example-transaction", "Build and run the transaction lifecycle example");
-    transaction_example_step.dependOn(&run_transaction_example.step);
-
-    const functions_example = b.addExecutable(.{
-        .name = "turso-functions",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/functions.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_functions_example = b.addRunArtifact(functions_example);
-    const functions_example_step = b.step("example-functions", "Build and run the managed functions and collation example");
-    functions_example_step.dependOn(&run_functions_example.step);
+    const examples_step = b.step("examples", "Run ordinary examples and compile encryption plus enabled sync examples");
+    const memcheck_smokes_step = b.step("build-memcheck-smokes", "Install representative executables for Valgrind");
+    const ordinary_examples = [_]struct {
+        name: []const u8,
+        description: []const u8,
+        memcheck: bool = false,
+    }{
+        .{ .name = "basic", .description = "Build and run the basic in-memory CRUD example", .memcheck = true },
+        .{ .name = "file", .description = "Build and run the persistent file database example" },
+        .{ .name = "values", .description = "Build and run the SQL value and owned-copy example" },
+        .{ .name = "diagnostics", .description = "Build and run the diagnostics and metadata example" },
+        .{ .name = "prepared", .description = "Build and run the prepared statement reuse example", .memcheck = true },
+        .{ .name = "batch", .description = "Build and run the structured batch example", .memcheck = true },
+        .{ .name = "transaction", .description = "Build and run the transaction lifecycle example", .memcheck = true },
+        .{ .name = "functions", .description = "Build and run the managed functions and collation example", .memcheck = true },
+        .{ .name = "ergonomic", .description = "Run named binding, typed row, and extension-control example", .memcheck = true },
+    };
+    for (ordinary_examples) |example| {
+        const executable = b.addExecutable(.{
+            .name = b.fmt("turso-{s}", .{example.name}),
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(b.fmt("examples/{s}.zig", .{example.name})),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{.{ .name = "turso", .module = turso_module }},
+            }),
+        });
+        const run = b.addRunArtifact(executable);
+        b.step(b.fmt("example-{s}", .{example.name}), example.description).dependOn(&run.step);
+        examples_step.dependOn(&run.step);
+        if (example.memcheck) {
+            const install = b.addInstallArtifact(executable, .{});
+            memcheck_smokes_step.dependOn(&install.step);
+        }
+    }
 
     const encryption_example = b.addExecutable(.{
         .name = "turso-encryption",
@@ -276,19 +208,6 @@ pub fn build(b: *std.Build) void {
     const install_encryption_example = b.addInstallArtifact(encryption_example, .{});
     const encryption_example_step = b.step("example-encryption", "Compile the encryption example without placing a secret in build arguments");
     encryption_example_step.dependOn(&install_encryption_example.step);
-
-    const ergonomic_example = b.addExecutable(.{
-        .name = "turso-ergonomic",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/ergonomic.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{.{ .name = "turso", .module = turso_module }},
-        }),
-    });
-    const run_ergonomic_example = b.addRunArtifact(ergonomic_example);
-    const ergonomic_example_step = b.step("example-ergonomic", "Run named binding, typed row, and extension-control example");
-    ergonomic_example_step.dependOn(&run_ergonomic_example.step);
 
     const sync_example_step = b.step("example-sync", "Compile the opt-in caller-owned sync transport example");
     if (sync_module) |module| {
@@ -339,24 +258,8 @@ pub fn build(b: *std.Build) void {
         sync_e2e_step.dependOn(&disabled.step);
     }
 
-    const examples_step = b.step("examples", "Build and run all public examples");
-    examples_step.dependOn(&run_basic_example.step);
-    examples_step.dependOn(&run_file_example.step);
-    examples_step.dependOn(&run_values_example.step);
-    examples_step.dependOn(&run_diagnostics_example.step);
-    examples_step.dependOn(&run_prepared_example.step);
-    examples_step.dependOn(&run_batch_example.step);
-    examples_step.dependOn(&run_transaction_example.step);
-    examples_step.dependOn(&run_functions_example.step);
     examples_step.dependOn(&install_encryption_example.step);
-    examples_step.dependOn(&run_ergonomic_example.step);
     if (sync) examples_step.dependOn(sync_example_step);
-
-    const memcheck_smokes_step = b.step("build-memcheck-smokes", "Install representative executables for Valgrind");
-    inline for (.{ basic_example, prepared_example, batch_example, transaction_example, functions_example, ergonomic_example }) |artifact| {
-        const install_artifact = b.addInstallArtifact(artifact, .{});
-        memcheck_smokes_step.dependOn(&install_artifact.step);
-    }
 
     const prepared_benchmark = b.addExecutable(.{
         .name = "turso-benchmark",

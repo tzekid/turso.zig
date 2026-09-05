@@ -174,10 +174,9 @@ fn isLoopbackHttp(url: []const u8) bool {
     const uri = std.Uri.parse(url) catch return false;
     if (!std.mem.eql(u8, uri.scheme, "http")) return false;
     var host_buffer: [std.Io.net.HostName.max_len]u8 = undefined;
-    const host = uri.getHost(&host_buffer) catch return false;
+    const host = std.Io.net.HostName.fromUri(uri, &host_buffer) catch return false;
     return std.mem.eql(u8, host.bytes, "127.0.0.1") or
-        std.ascii.eqlIgnoreCase(host.bytes, "localhost") or
-        std.mem.eql(u8, host.bytes, "::1");
+        std.ascii.eqlIgnoreCase(host.bytes, "localhost");
 }
 
 fn printUsage() error{MissingConfiguration} {

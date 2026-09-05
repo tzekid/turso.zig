@@ -16,13 +16,22 @@ module.
 
 ## Install
 
-The default build needs:
+The development build and code examples on this page use `master` and need:
 
 - Zig `0.17.0-dev.1963+e00c6c439` (the exact promoted `master` snapshot)
 - Rust and Cargo 1.88 or newer
 - a C toolchain
 
-Add the current tagged release to your project:
+Choose the compiler together with the release channel:
+
+| Channel | Zig | Turso SDK Kit |
+| --- | --- | --- |
+| `v0.1.0` release tag | `0.16.0` | `v0.7.0` |
+| `v0.1.1-stable` maintenance branch | `0.16.0` | `v0.7.1` |
+| `master` development branch | `0.17.0-dev.1963+e00c6c439` | `0.8.0-pre.2`, pinned commit below |
+
+Add the current tagged release using its matching compiler and
+[release documentation](https://github.com/tzekid/turso.zig/tree/v0.1.0):
 
 ```sh
 zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
@@ -465,7 +474,6 @@ uses fixtures, is in [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md).
 - [Pinned upstream ABI](docs/UPSTREAM_ABI.md)
 - [Updating Turso](docs/UPDATING_TURSO.md)
 - [Release process](docs/RELEASING.md)
-- [Security policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 
 Generate the API reference with `zig build docs`; it is written under

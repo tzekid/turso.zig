@@ -462,6 +462,14 @@ jobs:
             -Doptimize=ReleaseSafe \
             -j2 \
             --summary all
+          zig build example-sync \
+            -Dtarget=x86_64-linux-gnu \
+            -Dsync=true \
+            -Dnative=source \
+            -Dlinkage=static \
+            -Doptimize=ReleaseSafe \
+            -j2 \
+            --summary all
           static_lib=$(find .zig-cache/turso-cargo/turso_sync_sdk_kit \
             -type f -name libturso_sync_sdk_kit.a -not -path '*/deps/*' -print -quit)
           test -n "$static_lib"
