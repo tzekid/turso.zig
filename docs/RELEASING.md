@@ -11,13 +11,13 @@ consumers have passed the target-native CI matrix.
 | turso.zig version | `0.1.1` |
 | Zig development snapshot | `0.17.0-dev.1963+e00c6c439` |
 | Rust | `1.88` |
-| Turso development version | `0.8.0-pre.2` |
+| Turso development version | `0.8.0-pre.8` |
 | Turso channel | `main` |
-| Turso commit | `6e527a75595576790566f3d36560fbe95c5d87a2` |
-| Zig package hash | `N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr` |
-| `turso.h` body SHA-256 | `14ee49b4f6c00e3f8c3c710b4df1c316ecc0802e1d8b19815d8caab09f2b70cb` |
+| Turso commit | `7e2fc39de6ddce1100c5c014ee4b801db49e3ac2` |
+| Zig package hash | `N-V-__8AALsfgQSVmlHnFFr0ZmS7E7bYCwH5lvLVItOsFedK` |
+| `turso.h` body SHA-256 | `4e68f1979e239c675cfb39975e2f5120f481d6fb91f3777fd06b80a7872280a6` |
 | `turso_sync.h` body SHA-256 | `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1` |
-| Reproducible source epoch | `1785419245` |
+| Reproducible source epoch | `1788677055` |
 
 These are the reproducible development inputs on `master`, not release
 candidates. `tools/check-release-inputs.sh` rejects the `-dev` Zig compiler,

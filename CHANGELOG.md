@@ -35,7 +35,7 @@ is pre-1.0.
 
 - Kept the binding version at `0.1.1` while moving `master` to Zig
   `0.17.0-dev.1963+e00c6c439` and Turso main commit
-  `6e527a75595576790566f3d36560fbe95c5d87a2` (`0.8.0-pre.2`).
+  `7e2fc39de6ddce1100c5c014ee4b801db49e3ac2` (`0.8.0-pre.8`).
 - Replaced removed Zig C imports with build-owned translated C modules and
   adapted build paths, type reflection, allocator calls, enum names, and test
   syntax for Zig 0.17 development.

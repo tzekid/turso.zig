@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0-dev.1963+e00c6c439",
     .dependencies = .{
         .turso_native = .{
-            .url = "https://github.com/tursodatabase/turso/archive/6e527a75595576790566f3d36560fbe95c5d87a2.tar.gz",
-            .hash = "N-V-__8AADSU3gJ2m0iao7tlMOrDWVZW3oJjYQEf7rh-RdUr",
+            .url = "https://github.com/tursodatabase/turso/archive/7e2fc39de6ddce1100c5c014ee4b801db49e3ac2.tar.gz",
+            .hash = "N-V-__8AALsfgQSVmlHnFFr0ZmS7E7bYCwH5lvLVItOsFedK",
             .lazy = true,
         },
     },
