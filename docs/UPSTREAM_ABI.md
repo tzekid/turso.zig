@@ -8,8 +8,8 @@ The detailed stable baseline below is pinned to final annotated tag `v0.7.1` (ta
 release commit.
 
 `master` currently promotes development channel `main` at commit
-`6e527a75595576790566f3d36560fbe95c5d87a2`, declared version
-`0.8.0-pre.2`. The base header body remains byte-identical to the stable
+`7e2fc39de6ddce1100c5c014ee4b801db49e3ac2`, declared version
+`0.8.0-pre.8`. The base header body remains byte-identical to the stable
 baseline. The sync header changes comments only; its promoted body digest is
 `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1`.
 The development delta audit is recorded below. Re-audit it on every promoted

@@ -28,7 +28,7 @@ Choose the compiler together with the release channel:
 | --- | --- | --- |
 | `v0.1.0` release tag | `0.16.0` | `v0.7.0` |
 | `v0.1.1-stable` maintenance branch | `0.16.0` | `v0.7.1` |
-| `master` development branch | `0.17.0-dev.1963+e00c6c439` | `0.8.0-pre.2`, pinned commit below |
+| `master` development branch | `0.17.0-dev.1963+e00c6c439` | `0.8.0-pre.8`, pinned commit below |
 
 Add the current tagged release using its matching compiler and
 [release documentation](https://github.com/tzekid/turso.zig/tree/v0.1.0):
@@ -42,8 +42,8 @@ from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
 `master` is the moving development channel. It contains unreleased `0.1.1`
 work and currently pins the promoted Zig `master` snapshot above plus Turso
-`main` commit `6e527a75595576790566f3d36560fbe95c5d87a2` (declared upstream
-version `0.8.0-pre.2`). Until those inputs stabilize, `master` is the latest
+`main` commit `7e2fc39de6ddce1100c5c014ee4b801db49e3ac2` (declared upstream
+version `0.8.0-pre.8`). Until those inputs stabilize, `master` is the latest
 code rather than a release candidate. Its pins remain exact and reproducible:
 
 ```sh

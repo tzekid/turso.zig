@@ -1,7 +1,7 @@
 /*
- * Vendored from https://github.com/tursodatabase/turso/blob/6e527a75595576790566f3d36560fbe95c5d87a2/sync/sdk-kit/turso_sync.h
+ * Vendored from https://github.com/tursodatabase/turso/blob/7e2fc39de6ddce1100c5c014ee4b801db49e3ac2/sync/sdk-kit/turso_sync.h
  * Upstream channel: main
- * Upstream commit: 6e527a75595576790566f3d36560fbe95c5d87a2
+ * Upstream commit: 7e2fc39de6ddce1100c5c014ee4b801db49e3ac2
  * Copyright the Turso project contributors. Licensed under the MIT License.
  * The upstream header follows unchanged below this attribution block.
  */
