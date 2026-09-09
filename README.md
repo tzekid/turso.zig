@@ -18,7 +18,7 @@ module.
 
 The development build and code examples on this page use `master` and need:
 
-- Zig `0.17.0-dev.1963+e00c6c439` (the exact promoted `master` snapshot)
+- Zig `0.17.0-dev.2085+5e36170b5` (the exact promoted `master` snapshot)
 - Rust and Cargo 1.88 or newer
 - a C toolchain
 
@@ -28,7 +28,7 @@ Choose the compiler together with the release channel:
 | --- | --- | --- |
 | `v0.1.0` release tag | `0.16.0` | `v0.7.0` |
 | `v0.1.1-stable` maintenance branch | `0.16.0` | `v0.7.1` |
-| `master` development branch | `0.17.0-dev.1963+e00c6c439` | `0.8.0-pre.2`, pinned commit below |
+| `master` development branch | `0.17.0-dev.2085+5e36170b5` | `0.8.0-pre.2`, pinned commit below |
 
 Add the current tagged release using its matching compiler and
 [release documentation](https://github.com/tzekid/turso.zig/tree/v0.1.0):
