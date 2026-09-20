@@ -90,3 +90,74 @@ CI lane now compiles this example so the compatibility gap cannot stay hidden.
 Push only this reviewed default-branch change. No service deployment, consumer
 pin update, stable-channel change, or release publication is appropriate for
 this library/build/example/documentation cleanup.
+
+## Follow-up: 2026-09-20
+
+### Current scope and acceptance
+
+Default is `a5250717a895ee15da64f1d5eb0c608b306c6438`, Zig2085 from the
+existing promoted-input manifest, unchanged Turso `6e527a7` and Rust1.88.
+The original `ecosystem` checkout at40e7760, local pool experiment, historical
+plan, local tags, stable branch and application dependency pins are preserved.
+The clean follow-up checkout uses current master. No AGENTS file is tracked.
+The separate automated maintenance episode policy does not govern this explicit
+owner-authorized audit; its frozen candidates and branches remain untouched.
+
+Current exact-source CI34396261392 passed all supported native platform, sync
+and aggregate jobs. Extended35499979973 passed native dynamic/system linkage,
+Linux faults, real local-server sync and lifecycle soak. Source export has135
+files,229231compressed bytes and no generated cache entries. No remaining
+runtime/build/example defect is established by inspection; do not manufacture
+a rewrite or promote the unused pool to produce a change.
+
+1. Recheck default native database/ownership/ABI/durability and ordinary examples
+   with the promoted compiler. Keep encryption compile-only and sync opt-in.
+2. Recheck ReleaseFast ownership invariants, sync workflows/ABI and enabled
+   example compilation. Preserve local-only credential-free tests and explicit
+   loopback HTTP policy. Do not send remote credentials or publish diagnostic
+   response bodies.
+3. Build/run the exported source consumer and compile its sync example against
+   the exact existing native artifacts; inspect exported inputs and README
+   compilation. Keep all application pins unchanged. If a concrete finding
+   appears, make the narrow repair and reset the implementation review count.
+4. Require two complete clean implementation reviews. Commit only this audit
+   record if behavior/package remain correct. Push default and verify its exact
+   configured CI, including intentional path-filtered skips. No service exists
+   to deploy; SDK publication does not imply consumer adoption, new tags,
+   stable-channel edits, prebuilt artifacts or release publication.
+
+### Follow-up plan reviews
+
+- Pass1, complete API/behavior/security/ownership perspective: traced ordinary
+  versus encryption/sync build branches, current sync URI handling, retained
+  native and ownership tests, consumer modules and platform boundaries. The
+  acceptance exercises real database and exported use without weakening the
+  FFI or inventing another test matrix. Zero findings; clean1.
+- Pass2, complete delivery/preservation perspective: verified remote default,
+  all worktrees, experimental refs, hosted tag/stable identities, current exact
+  CI/extended runs, promoted input authority and clean package contents. The
+  plan preserves automated candidates and each sibling pin and correctly
+  distinguishes source publication from adoption. Zero findings; clean2.
+
+### Follow-up implementation reviews and delivery
+
+- Pass1, complete functional/security/lifetime review: current default passes
+  `test examples` Debug (92/92steps,136/136tests), ReleaseFast ownership probes
+  (7/7steps), and ReleaseSafe sync workflows/ABI plus example compilation.
+  Rechecked explicit example registration, compile-only encryption, opt-in sync
+  refusal, HostName URI handling, fixed transport error categories, native
+  ownership and failure cleanup. Existing tests retain real database durability
+  and negative native-boundary assertions. No code repair is warranted. Zero
+  findings; clean1.
+- Pass2, complete package/operations/preservation review: base exported consumer
+  executes5/5steps, sync consumer6/6, exported sync example6/6. All48base ABI
+  symbols match; promoted inputs are internally consistent; README compiles;
+  archive135files has no generated caches. Exact existing platform and extended
+  CI cover unchanged runtime/package code, including real local sync and native
+  non-Linux linkage. Original pool checkout/plan, all tags and stable ref match
+  their saved identities. Only this audit record changed; no application pin,
+  runtime service or maintenance candidate was modified. Zero findings; clean2.
+
+Publish the audit record to default and check its exact CI. Documentation path
+filtering may intentionally skip unchanged native jobs; their current-source
+success above is recorded separately. The exported SDK contents remain unchanged.
