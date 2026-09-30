@@ -11,7 +11,7 @@ zig_bin=${ZIG:-zig}
 # and makes accidental narrowing traps a normal aggregate-build failure.
 translated_header=$(mktemp "${TMPDIR:-/tmp}/turso-c-32bit.XXXXXX.zig")
 trap 'rm -f "$translated_header"' EXIT
-"$zig_bin" translate-c -target x86-linux-gnu -I include include/turso.h >"$translated_header"
+"$zig_bin" translate-c -target x86-linux-gnu -lc -I include include/turso.h >"$translated_header"
 "$zig_bin" test -target x86-linux-gnu -fno-emit-bin \
     --dep turso \
     -Mroot=tests/statements.zig \

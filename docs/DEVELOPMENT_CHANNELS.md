@@ -237,7 +237,7 @@ specification.
 
 ## 7. Machine-readable target manifest
 
-The currently promoted Zig version is `0.17.0-dev.2307+392b17125`; exact
+The currently promoted Zig version is `0.17.0-dev.2338+b46a7f3a2`; exact
 archive URLs and checksums are recorded in `tools/development-targets.json`.
 
 The implementation must add `tools/development-targets.json` as the canonical
