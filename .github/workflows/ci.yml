@@ -86,7 +86,7 @@ jobs:
             esac
 
             case "$path" in
-              build.zig|build.zig.zon|src/*|include/*|tests/*sync*|tests/expected-*-symbols.txt|tools/development-targets.json|tools/*development-target*|tools/check-upstream-drift.sh|tools/check-sync-e2e.sh|.github/workflows/*)
+              build.zig|build.zig.zon|src/*|include/*|tests/*sync*|tests/expected-*-symbols.txt|tools/check-sync-e2e.sh|.github/workflows/*)
                 sync=true
                 ;;
             esac
@@ -119,9 +119,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -129,14 +129,13 @@ jobs:
           version: ${{ steps.targets.outputs.zig_version }}
           use-cache: false
 
-      - name: Record promoted environment
+      - name: Record pinned environment
         run: |
           echo "turso.zig commit=$(git rev-parse HEAD)"
           echo "zig=$(zig version)"
           echo "rust=$(rustc -V)"
           echo "cargo=$(cargo -V)"
-          jq -r '"turso=\(.turso.declared_version) commit=\(.turso.commit) rust=\(.turso.rust_toolchain)"' tools/development-targets.json
-          jq -r '"base_header=\(.turso.base_header_sha256) sync_header=\(.turso.sync_header_sha256)"' tools/development-targets.json
+          grep -E '^pub const upstream(_commit|_header_sha256|_sync_header_sha256)? ' src/version.zig
           echo "required targets=x86_64-linux-gnu,aarch64-macos,x86_64-windows-msvc,aarch64-linux-gnu"
 
       - name: Verify formatting and shell scripts
@@ -158,14 +157,11 @@ jobs:
           tools/check-abi-symbols.sh --header-only
           tools/check-abi-symbols.sh --sync --header-only
           test "$(zig version)" = "$ZIG_VERSION"
-          tools/check-development-targets.sh
-          tests/classify-development-targets.sh
-          tests/development-target-lifecycle.sh
           if tools/check-release-inputs.sh --skip-tree-state --skip-ref 2>release-guard.log; then
-            echo "development inputs unexpectedly passed the stable release guard" >&2
+            echo "prerelease Turso inputs unexpectedly passed the stable release guard" >&2
             exit 1
           fi
-          grep -F "Zig must be stable" release-guard.log
+          grep -F "Turso must be stable" release-guard.log
           git diff --exit-code
 
   linux-x64:
@@ -180,9 +176,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -252,9 +248,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -314,9 +310,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -380,9 +376,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -433,9 +429,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1

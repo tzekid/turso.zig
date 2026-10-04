@@ -6,9 +6,8 @@ status, or behavior.
 
 ## 1. Establish immutable provenance
 
-Use a separate Turso checkout. On `master`, resolve `main` once and immediately
-freeze the resulting full commit; for a stable release, select an annotated
-release tag:
+Use a separate Turso checkout. Select an annotated release tag; a `main`
+commit is acceptable on `master` only when a needed fix is not yet released:
 
 ```sh
 git -C /path/to/turso fetch --tags origin main
@@ -109,14 +108,14 @@ Capture native static link requirements, dynamic dependencies, minimum libc/OS
 evidence, tool versions, checksums, and installed runtime lookup separately for
 each target.
 
-## 6. Promote development or release intentionally
+## 6. Update or release intentionally
 
-Development promotion updates `master` without changing the binding version or
+An input update changes `master` without changing the binding version or
 publishing assets. Update `CHANGELOG.md` even when downstream Zig source remains
-compatible and run the target manifest, ABI, behavior, and hosted gates.
+compatible and run the ABI, behavior, and hosted gates.
 
-Stable publication is a separate compatibility event. It first replaces
-development Zig and Turso inputs with stable versions and real tag provenance,
+Stable publication is a separate compatibility event. It first replaces any
+prerelease Turso input with a stable version and real tag provenance,
 then runs deterministic package assembly and extracted-consumer smoke tests.
 Publish only after the release commit is green and the annotated tags point to
 the exact audited commits.

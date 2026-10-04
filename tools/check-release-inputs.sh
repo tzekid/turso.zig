@@ -109,9 +109,4 @@ if [[ $skip_ref == false ]]; then
   fi
 fi
 
-if [[ -f "$source_root/tools/development-targets.json" ]]; then
-  "$source_root/tools/check-development-targets.sh" >/dev/null ||
-    fail "target manifest copies disagree"
-fi
-
 echo "stable release inputs accepted"

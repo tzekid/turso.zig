@@ -4,12 +4,12 @@ Releases are tied to an exact Turso SDK Kit tag. A release is ready only after
 the wrapper, the C headers, the native libraries, and clean downstream
 consumers have passed the target-native CI matrix.
 
-## Current development inputs are not releasable
+## Current inputs are not releasable
 
 | Item | Value |
 | --- | --- |
 | turso.zig version | `0.1.1` |
-| Zig development snapshot | `0.17.0-dev.2338+b46a7f3a2` |
+| Zig | `0.17.0` |
 | Rust | `1.88` |
 | Turso development version | `0.8.0-pre.2` |
 | Turso channel | `main` |
@@ -19,12 +19,11 @@ consumers have passed the target-native CI matrix.
 | `turso_sync.h` body SHA-256 | `f9de9cb7eab356e59fd7efdbc02c6a35598588202297535436ecfeaa8ad7bda1` |
 | Reproducible source epoch | `1785419245` |
 
-These are the reproducible development inputs on `master`, not release
-candidates. `tools/check-release-inputs.sh` rejects the `-dev` Zig compiler,
-the `-pre` Turso version, null tag provenance, and the `master` branch.
-Preparing a stable release is a separate change that selects stable Zig and
-Turso versions, records a real annotated Turso tag, and deliberately decides
-the binding version. The `v0.1.1-stable` branch remains the locked stable
+These are the reproducible inputs on `master`, not release candidates.
+`tools/check-release-inputs.sh` rejects the `-pre` Turso version, null tag
+provenance, and the `master` branch. Preparing a stable release is a separate
+change that selects a stable Turso version, records a real annotated Turso tag,
+and deliberately decides the binding version. The `v0.1.1-stable` branch remains the locked stable
 baseline.
 
 For a future stable release, the tag object and peeled commit are recorded
@@ -93,7 +92,7 @@ target-native gates must pass for the tagged commit:
 Before creating the tag, manually dispatch the extended workflow for the
 release commit. It owns dynamic/system linkage, feature variants, Valgrind,
 fault injection, the deterministic lifecycle/fan-out soak, and the local-server
-sync round trip. The drift workflow remains advisory.
+sync round trip.
 
 The tagged release assembles only two platform-independent source packages:
 base and sync. It assembles each package twice, requires byte-identical output,

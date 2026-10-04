@@ -30,9 +30,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read promoted development targets
+      - name: Read pinned toolchains
         id: targets
-        run: tools/export-development-targets.sh
+        run: tools/export-toolchains.sh
 
       - name: Install native Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1

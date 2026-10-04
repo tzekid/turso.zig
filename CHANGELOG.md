@@ -8,10 +8,6 @@ is pre-1.0.
 
 ### Added
 
-- Added exact Zig-master and Turso-main target manifests, resolver and
-  consistency tooling, fixture-backed candidate classification, daily
-  maintenance automation, episode-deduplicated issues, manifest-driven hosted
-  toolchains, and frozen routine or maintenance draft pull requests.
 - Added stable-publication guards that reject development compilers,
   prerelease Turso inputs, missing tag provenance, dirty trees, and development
   branches.
@@ -33,12 +29,13 @@ is pre-1.0.
 
 ### Changed
 
-- Kept the binding version at `0.1.1` while moving `master` to Zig
-  `0.17.0-dev.2338+b46a7f3a2` and Turso main commit
-  `6e527a75595576790566f3d36560fbe95c5d87a2` (`0.8.0-pre.2`).
+- Kept the binding version at `0.1.1` while moving `master` to Zig `0.17.0`
+  and Turso main commit `6e527a75595576790566f3d36560fbe95c5d87a2`
+  (`0.8.0-pre.2`). Upstream inputs are updated deliberately; there is no
+  automated tracking of Zig master or Turso main.
 - Replaced removed Zig C imports with build-owned translated C modules and
   adapted build paths, type reflection, allocator calls, enum names, and test
-  syntax for Zig 0.17 development.
+  syntax for Zig 0.17.
 - Audited Turso's internal async-open/VFS refactor and sync protocol
   auto-detection. Public base declarations and symbols are unchanged; the sync
   header change is comment-only.

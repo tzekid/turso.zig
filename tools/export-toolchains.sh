@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
+# Expose the pinned Zig and the Rust toolchain of the pinned Turso source to CI.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-manifest="$repo_root/tools/development-targets.json"
-
-zig_version=$(jq -er '.zig.version' "$manifest")
-rust_toolchain=$(jq -er '.turso.rust_toolchain' "$manifest")
+zig_version=$(<"$repo_root/.zigversion")
+rust_toolchain=1.88 # rust-toolchain.toml of the Turso commit in src/version.zig
 
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then
   {

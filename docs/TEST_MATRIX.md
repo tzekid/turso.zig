@@ -66,7 +66,6 @@ every platform and every change.
 | `extended.yml` | Weekly or manual | Dynamic/system linkage, features, faults, Valgrind, sync E2E, long soak | Bounded per job; seven-day diagnostics |
 | `windows-arm-preview.yml` | Weekly or manual | Tier 3 native ARM64 static promotion probe | 45-minute job cap; 10–15-minute stages |
 | `release.yml` | Version tags or manual rehearsal | Reuse supported CI, certify two source archives, publish tags | Release-only artifacts, seven-day workflow retention |
-| `drift.yml` | Daily candidate detection, weekly promoted-pin exercise, or manual | Classify Zig-master and Turso-main candidates; propose routine updates or open maintenance issues | Seven-day diagnostics |
 
 Documentation-only changes still run the quick gate but skip native platform
 jobs. `Supported platforms` is the stable aggregate check to use for branch
@@ -112,9 +111,8 @@ Every workflow action is pinned to an exact commit.
   version selected by the build.
 - `-Dturso-source=/path` builds and tests an explicit Turso checkout while
   deriving that checkout's workspace version.
-- Required CI uses the exact promoted development pins. The scheduled drift
-  workflow resolves moving channels separately, records candidate evidence,
-  and never changes a required build implicitly.
+- Required CI uses the exact pinned Zig and Turso inputs; updating them is a
+  deliberate change.
 
 ### Ownership and failure
 
