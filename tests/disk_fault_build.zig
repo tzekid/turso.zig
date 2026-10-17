@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
         "Directory containing libturso_sdk_kit.so",
     ) orelse @panic("-Dnative-lib-dir is required");
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{}) orelse .debug;
 
     const build_options_module = b.createModule(.{
         .root_source_file = .{

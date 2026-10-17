@@ -7,7 +7,7 @@ const NativeMode = enum { source, system };
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{}) orelse .debug;
     const native_mode = b.option(NativeMode, "native", "Native backend: source (default) or system") orelse .source;
     const linkage = b.option(std.builtin.LinkMode, "linkage", "Turso native linkage: static (default) or dynamic") orelse .static;
     const native_path = b.option([]const u8, "native-path", "System-mode prefix containing lib/ (and optionally include/)");

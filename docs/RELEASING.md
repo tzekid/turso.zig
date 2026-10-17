@@ -9,7 +9,7 @@ consumers have passed the target-native CI matrix.
 | Item | Value |
 | --- | --- |
 | turso.zig version | `0.1.1` |
-| Zig | `0.17.0` |
+| Zig | `0.18.0-dev.253+16d31ceed` |
 | Rust | `1.88` |
 | Turso development version | `0.8.0-pre.2` |
 | Turso channel | `main` |

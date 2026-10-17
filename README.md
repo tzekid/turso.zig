@@ -1,7 +1,7 @@
 # turso.zig
 
 [![CI](https://github.com/tzekid/turso.zig/actions/workflows/ci.yml/badge.svg)](https://github.com/tzekid/turso.zig/actions/workflows/ci.yml)
-[![Zig 0.17.0](https://img.shields.io/badge/Zig-0.17.0-f7a41d)](https://ziglang.org/download/)
+[![Zig master](https://img.shields.io/badge/Zig-master-f7a41d)](https://ziglang.org/download/)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A small, unofficial Zig binding for the
@@ -18,7 +18,7 @@ module.
 
 The code examples on this page use `master` and need:
 
-- Zig `0.17.0`
+- Zig `0.18.0-dev.253+16d31ceed`
 - Rust and Cargo 1.88 or newer
 - a C toolchain
 
@@ -28,7 +28,7 @@ Choose the compiler together with the release channel:
 | --- | --- | --- |
 | `v0.1.0` release tag | `0.16.0` | `v0.7.0` |
 | `v0.1.1-stable` maintenance branch | `0.16.0` | `v0.7.1` |
-| `master` | `0.17.0` | `0.8.0-pre.2`, pinned commit below |
+| `master` | `0.18.0-dev.253+16d31ceed` | `0.8.0-pre.2`, pinned commit below |
 
 Add the current tagged release using its matching compiler and
 [release documentation](https://github.com/tzekid/turso.zig/tree/v0.1.0):
@@ -40,7 +40,7 @@ zig fetch --save=turso git+https://github.com/tzekid/turso.zig#v0.1.0
 The first build can take a while because the default backend compiles Turso
 from source. `v0.1.0` pins Turso SDK Kit `v0.7.0`.
 
-`master` contains unreleased `0.1.1` work. It pins Zig `0.17.0` and Turso
+`master` contains unreleased `0.1.1` work. It pins Zig `0.18.0-dev.253+16d31ceed` and Turso
 `main` commit `6e527a75595576790566f3d36560fbe95c5d87a2` (declared upstream
 version `0.8.0-pre.2`). Upstream updates are deliberate changes, not automated
 tracking. Until Turso moves to a stable release, `master` is the latest code

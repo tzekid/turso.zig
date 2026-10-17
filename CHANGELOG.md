@@ -29,6 +29,7 @@ is pre-1.0.
 
 ### Changed
 
+- Updated the development compiler pin to Zig `0.18.0-dev.253+16d31ceed`.
 - Kept the binding version at `0.1.1` while moving `master` to Zig `0.17.0`
   and Turso main commit `6e527a75595576790566f3d36560fbe95c5d87a2`
   (`0.8.0-pre.2`). Upstream inputs are updated deliberately; there is no

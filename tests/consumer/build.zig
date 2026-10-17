@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{}) orelse .debug;
     const native = b.option([]const u8, "native", "Forwarded turso native mode") orelse "source";
     const linkage = b.option([]const u8, "linkage", "Forwarded turso linkage mode") orelse "static";
     const native_path = b.option([]const u8, "native-path", "Forwarded turso native prefix");
