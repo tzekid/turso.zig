@@ -161,7 +161,10 @@ jobs:
             echo "prerelease Turso inputs unexpectedly passed the stable release guard" >&2
             exit 1
           fi
-          grep -F "Turso must be stable" release-guard.log
+          case "$ZIG_VERSION" in
+            *-*) grep -F "Zig must be stable" release-guard.log ;;
+            *) grep -F "Turso must be stable" release-guard.log ;;
+          esac
           git diff --exit-code
 
   linux-x64:
